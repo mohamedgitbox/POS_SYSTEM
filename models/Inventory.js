@@ -2,12 +2,12 @@ const mongoose = require('mongoose');
 
 const inventorySchema = new mongoose.Schema(
   {
-    product_id: {
+    productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
       required: true
     },
-    branch_id: {
+    branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Branch',
       required: true
@@ -26,16 +26,24 @@ const inventorySchema = new mongoose.Schema(
     reserved: {
       type: Number,
       default: 0,
-      min: [0, 'Reserved quantity cannot be negative']
+      min: [0, 'Reserved quantity cannot be negative'],
+      validate: {
+        validator: function (value) {
+          return value <= this.quantity;
+        },
+        message: 'Reserved quantity cannot exceed stock quantity'
+      }
     }
   },
   {
     timestamps: true,
-    collection: 'inventories',
-    indexes: [
-      { product_id: 1, branch_id: 1, unique: true }
-    ]
+    collection: 'inventories'
   }
+);
+
+inventorySchema.index(
+  { productId: 1, branchId: 1 },
+  { unique: true }
 );
 
 module.exports = mongoose.model('Inventory', inventorySchema);

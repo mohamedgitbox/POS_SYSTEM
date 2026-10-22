@@ -1,4 +1,3 @@
-
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const mongoose = require("mongoose");
@@ -40,6 +39,13 @@ const seedData = async () => {
         phone: "01111111111",
         email: "alex@pos.com",
       },
+      {
+        name: "Mansoura Branch",
+        code: "MAN-01",
+        address: { street: "any", city: "Mansoura", country: "Egypt" },
+        phone: "01211111111",
+        email: "man@pos.com",
+      },
     ]);
 
     const mainBranchId = branches[0]._id;
@@ -51,14 +57,14 @@ const seedData = async () => {
         email: "admin@pos.com",
         password: "password123",
         role: "super_admin",
-        branch_id: mainBranchId,
+        branchId: mainBranchId,
       },
       {
         name: "Main Cashier",
         email: "cashier1@pos.com",
         password: "password123",
         role: "cashier",
-        branch_id: mainBranchId,
+        branchId: mainBranchId,
       },
     ]);
 
@@ -89,20 +95,20 @@ const seedData = async () => {
 
     await Inventory.create([
       {
-        product_id: products[0]._id,
-        branch_id: mainBranchId,
+        productId: products[0]._id,
+        branchId: mainBranchId,
         quantity: 20,
         reorderLevel: 5,
       },
       {
-        product_id: products[1]._id,
-        branch_id: mainBranchId,
+        productId: products[1]._id,
+        branchId: mainBranchId,
         quantity: 50,
         reorderLevel: 10,
       },
       {
-        product_id: products[0]._id,
-        branch_id: alexBranchId,
+        productId: products[0]._id,
+        branchId: alexBranchId,
         quantity: 8,
         reorderLevel: 3,
       },

@@ -1,59 +1,69 @@
+
 const mongoose = require('mongoose');
 
-const saleItemSchema = new mongoose.Schema({
-  productId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product',
-    required: true
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    min: [1, 'Quantity cannot be less than 1']
-  },
-  price: {
-    type: Number,
-    required: true,
-    min: 0
-  }
-});
-
-const saleSchema = new mongoose.Schema(
+const customerSchema = new mongoose.Schema(
   {
-    invoiceNo: {
+    name: {
       type: String,
-      required: true,
-      unique: true,
-      trim: true
+      required: [true, 'Customer name is required'],
+      trim: true,
+      maxlength: [150, 'Customer name cannot exceed 150 characters']
     },
+
+    phone: {
+      type: String,
+      trim: true,
+      maxlength: [20, 'Phone number cannot exceed 20 characters']
+    },
+
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      maxlength: [254, 'Email cannot exceed 254 characters'],
+      match: [
+        /^\S+@\S+\.\S+$/,
+        'Please enter a valid email address'
+      ]
+    },
+
+    address: {
+      type: String,
+      trim: true,
+      maxlength: [300, 'Address cannot exceed 300 characters']
+    },
+
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Branch',
       required: true
     },
-    userId: {
+
+    createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true
     },
-    customerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Customer',
-      default: null 
-    },
-    items: [saleItemSchema], 
-    totalAmount: {
-      type: Number,
-      required: true,
-      min: 0
-    },
-    paymentMethod: {
-      type: String,
-      enum: ['CASH', 'CARD', 'MIXED'],
-      default: 'CASH'
+
+    isActive: {
+      type: Boolean,
+      default: true
     }
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    collection: 'customers'
+  }
 );
 
-module.exports = mongoose.model('Sale', saleSchema);
+customerSchema.index(
+  { branchId: 1, phone: 1 }, 
+  {
+    unique: true,
+    partialFilterExpression: {
+      phone: { $type: 'string' }
+    }
+  }
+);
+
+module.exports = mongoose.model('Customer', customerSchema);

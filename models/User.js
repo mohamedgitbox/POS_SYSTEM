@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema(
       enum: ['super_admin', 'branch_manager', 'cashier'],
       default: 'cashier'
     },
-    branch_id: {
+    branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Branch',
       default: null
@@ -44,7 +44,7 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Hash password before saving
+// Hash password before saving 
 
 userSchema.pre('save', async function () {
   if (!this.isModified('password')) return;
