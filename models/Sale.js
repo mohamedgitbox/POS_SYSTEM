@@ -56,9 +56,14 @@ const saleSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    customerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Customer",
+      default: "null",
+    },
     customerInfo: {
       name: { type: String, trim: true, default: "Walk-in Customer" },
-      phone: { type: String, trim: true },
+      phone: { type: String, trim: true, default: "" },
     },
     items: [saleItemSchema],
     subtotal: {
@@ -99,5 +104,8 @@ const saleSchema = new mongoose.Schema(
     collection: "sales",
   },
 );
+
+saleSchema.index({ branchId: 1, createdAt: -1 });
+saleSchema.index({ status: 1 });
 
 module.exports = mongoose.model("Sale", saleSchema);

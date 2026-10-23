@@ -79,4 +79,19 @@ const transferSchema = new mongoose.Schema(
   }
 );
 
+transferSchema.pre('validate', function () {
+  if (
+    this.sourceBranchId &&
+    this.destinationBranchId &&
+    this.sourceBranchId.equals(this.destinationBranchId)
+  ) {
+    this.invalidate(
+      'destinationBranchId',
+      'Source and destination branches must be different'
+    );
+  }
+});
+
+transferSchema.index({ status: 1 });
+
 module.exports = mongoose.model('Transfer', transferSchema);

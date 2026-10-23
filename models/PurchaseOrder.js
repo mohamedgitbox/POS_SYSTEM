@@ -49,8 +49,8 @@ const purchaseOrderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["PENDING", "RECEIVED", "CANCELLED"],
-      default: "PENDING",
+      enum: ["pending", "received", "cancelled"],
+      default: "pending",
     },
   },
   { timestamps: true },
@@ -58,16 +58,3 @@ const purchaseOrderSchema = new mongoose.Schema(
 
 module.exports = mongoose.model("PurchaseOrder", purchaseOrderSchema);
 
-// إضافة تحقق يمنع items الفارغة.
-
-// حساب totalCost داخل الـ Backend، وعدم الوثوق في القيمة القادمة من العميل.
-
-// التفكير في Supplier Model بدل تخزين اسم المورد فقط، إذا كنت تحتاج بيانات المورد وسجله التاريخي.
-
-// إضافة دعم الاستلام الجزئي إذا كان النشاط يحتاجه، باستخدام حقول مثل receivedQty.
-
-// حماية عملية الاستلام باستخدام Transaction ومنع استلام الطلب أكثر من مرة.
-
-// استخدام طريقة دقيقة لحساب المبالغ المالية، مع مراعاة دقة العملة.
-
-// تحديد قواعد واضحة لتعديل أو إلغاء أمر الشراء بعد الاستلام.
