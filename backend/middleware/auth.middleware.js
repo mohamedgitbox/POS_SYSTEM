@@ -1,10 +1,8 @@
-const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
 
-const protect = async (req, res, next) => {
+const authProtect = async (req, res, next) => {
   try {
     let token;
 
@@ -17,30 +15,48 @@ const protect = async (req, res, next) => {
 
     if (!token) {
       return res.status(401).json({
-        status: "failed",
-        message: "Invalid Credential (Not Found Berar Token)",
+        success: false,
+        message: "Invalid Credentials: No Bearer Token provided",
       });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const currentUser = await User.findById(decoded._id);
+    const currentUser = await User.findById(decoded.id);
+
     if (!currentUser) {
       return res.status(401).json({
-        status: "failed",
-        message: "Invalid Credential (user not found)",
+        success: false,
+        message: "Invalid Credentials: The user belonging to this token no longer exists",
       });
     }
 
-    req.user = currentUser; //todo: ?search 
+    if (currentUser.changedPasswordAfter && currentUser.changedPasswordAfter(decoded.iat)) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid Credentials: User recently changed password. Please log in again.",
+      });
+    }
 
+    req.user = currentUser;
     next();
+    
   } catch (error) {
+    let errorMessage = "Invalid Credentials: Token verification failed";
+    
+    if (error.name === "TokenExpiredError") {
+      errorMessage = "Invalid Credentials: Token has expired";
+    } else if (error.name === "JsonWebTokenError") {
+      errorMessage = "Invalid Credentials: Invalid token signature";
+    }
+
+    console.error("Auth Middleware Error:", error.message);
+
     return res.status(401).json({
-      message: "Invalid Credential (token is expired)",
-      error: error.message,
+      success: false,
+      message: errorMessage,
     });
   }
 };
 
-module.exports = protect;
+module.exports = authProtect;
