@@ -1,5 +1,5 @@
 const express = require("express");
-const { root } = require("../controllers/Branch.controller");
+const { root } = require("../controllers/branch.controller");
 const router = express.Router();
 
 router.get("/", root);

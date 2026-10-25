@@ -16,11 +16,11 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev')); 
 
 //  API Routes
-app.use('/api/auth', require('./routes/authRoutes'));       
-app.use('/api/users', require('./routes/userRoutes'));
-app.use('/api/branches', require('./routes/Branch.route'));
-app.use('/api/products', require('./routes/productRoutes'));
-app.use('/api/inventory', require('./routes/inventoryRoutes'));
+app.use('/api/auth', require('./routes/auth.route'));       
+app.use('/api/users', require('./routes/user.route'));
+app.use('/api/branches', require('./routes/branch.route'));
+app.use('/api/products', require('./routes/product.route'));
+app.use('/api/inventory', require('./routes/inventory.route'));
 
 // the main route
 app.get('/', (req, res) => {
