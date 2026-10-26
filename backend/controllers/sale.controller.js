@@ -1,9 +1,11 @@
-const mongoose = require("mongoose");
-const Sale = require("../models/Sale");
-const Product = require("../models/Product");
-const Inventory = require("../models/Inventory");
-
 const createSale = async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({
+      status: "failed",
+      msg: "Unauthorized: No user found. Please check your token.",
+    });
+  }
+
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -25,10 +27,9 @@ const createSale = async (req, res) => {
 
     if (products.length !== productIds.length) {
       await session.abortTransaction();
-      return res.status(404).json({
-        status: "failed",
-        msg: "One or more products not found",
-      });
+      return res
+        .status(404)
+        .json({ status: "failed", msg: "One or more products not found" });
     }
 
     const saleItems = [];
@@ -36,7 +37,6 @@ const createSale = async (req, res) => {
 
     for (const item of items) {
       const product = products.find((p) => p._id.toString() === item.productId);
-
       const inventory = await Inventory.findOne({
         productId: item.productId,
         branchId: branchId,
@@ -111,6 +111,12 @@ const createSale = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error("Sale Error:", error);
+
+    if (error.name === "CastError") {
+      return res
+        .status(400)
+        .json({ status: "failed", msg: "Invalid ID format" });
+    }
 
     res.status(500).json({
       status: "failed",
