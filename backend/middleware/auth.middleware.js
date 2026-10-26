@@ -1,5 +1,8 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+
+const isDev = process.env.NODE_ENV === "development";
+
 const authProtect = async (req, res, next) => {
   try {
     let token;
@@ -18,16 +21,16 @@ const authProtect = async (req, res, next) => {
       });
     }
 
-    console.log("🔍 Token received:", token.substring(0, 20) + "...");
-
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log(" Decoded token:", decoded);
 
     const currentUser = await User.findById(decoded.id || decoded._id);
-    console.log(
-      "🔍 Current user found:",
-      currentUser ? currentUser.email : "NULL",
-    );
+
+    if (isDev) {
+      console.log(
+        "Auth check:",
+        currentUser ? currentUser.email : "NULL user for token",
+      );
+    }
 
     if (!currentUser) {
       return res.status(401).json({
@@ -37,7 +40,14 @@ const authProtect = async (req, res, next) => {
       });
     }
 
-    // فحص تغيير الباسورد
+    // Deactivated accounts can no longer use previously issued tokens
+    if (!currentUser.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Account is deactivated. Please contact an administrator.",
+      });
+    }
+
     if (currentUser.passwordChangedAt) {
       const changedTimestamp = parseInt(
         currentUser.passwordChangedAt.getTime() / 1000,

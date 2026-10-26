@@ -12,6 +12,9 @@ const Customer = require("../models/Customer");
 const Sale = require("../models/Sale");
 const PurchaseOrder = require("../models/PurchaseOrder");
 const Transfer = require("../models/Transfer");
+const Refund = require("../models/Refund");
+const Shift = require("../models/Shift");
+const InventoryLog = require("../models/InventoryLog");
 
 const models = {
   User,
@@ -22,6 +25,9 @@ const models = {
   Sale,
   PurchaseOrder,
   Transfer,
+  Refund,
+  Shift,
+  InventoryLog,
 };
 for (const [name, model] of Object.entries(models)) {
   if (typeof model.deleteMany !== "function") {
@@ -60,6 +66,9 @@ const seedDatabase = async () => {
     };
 
     await dropCollection(Transfer);
+    await dropCollection(Refund);
+    await dropCollection(Shift);
+    await dropCollection(InventoryLog);
     await dropCollection(Sale);
     await dropCollection(PurchaseOrder);
     await dropCollection(Inventory);
@@ -277,6 +286,38 @@ const seedDatabase = async () => {
       status: "in_transit",
       approvedBy: superAdmin._id,
     });
+
+    console.log("💵 Opening a shift for cashier1...");
+    const openShift = await Shift.create({
+      branchId: branch1._id,
+      cashierId: cashier1._id,
+      openingBalance: 500,
+      status: "open",
+    });
+
+    console.log("📝 Seeding inventory audit logs...");
+    await InventoryLog.create([
+      {
+        productId: product1._id,
+        branchId: branch1._id,
+        type: "sale",
+        change: -1,
+        quantityAfter: 49,
+        referenceId: null,
+        userId: cashier1._id,
+        reason: "Seed sale SALE-2023-001",
+      },
+      {
+        productId: product2._id,
+        branchId: branch1._id,
+        type: "purchase_order",
+        change: 100,
+        quantityAfter: 200,
+        referenceId: null,
+        userId: manager1._id,
+        reason: "Seed PO PO-2023-001 received",
+      },
+    ]);
 
     console.log("\n Database seeding completed successfully!");
 

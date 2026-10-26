@@ -13,6 +13,6 @@ router.get(
 
 router.post("/login", login);
 
-router.post("/register", register);
+router.post("/register", authProtect, isAllowed("super_admin"), register);
 
 module.exports = router;

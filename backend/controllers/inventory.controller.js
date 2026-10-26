@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 const Inventory = require("../models/Inventory");
 const Product = require("../models/Product");
 const Branch = require("../models/Branch");
+const InventoryLog = require("../models/InventoryLog");
+const assertBranchAccess = require("../utils/assertBranchAccess");
 
 const getInventoryByBranch = async (req, res) => {
   try {
@@ -84,10 +86,22 @@ const adjustInventory = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { productId, branchId, reason } = req.body;
+    const { productId, branchId: requestedBranchId, reason } = req.body;
     let adjustment = req.body.adjustment;
 
-    if (!productId || !branchId || !reason || adjustment === undefined) {
+    // resolve the effective branch (server-side, role-aware)
+    let branchId;
+    try {
+      branchId = assertBranchAccess(req.user, requestedBranchId);
+    } catch (err) {
+      await session.abortTransaction();
+      return res.status(err.statusCode || 400).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
+    if (!productId || !reason || adjustment === undefined) {
       await session.abortTransaction();
       return res.status(400).json({
         status: "failed",
@@ -152,6 +166,23 @@ const adjustInventory = async (req, res) => {
       { new: true, session },
     );
 
+    // write the audit entry inside the same transaction
+    await InventoryLog.create(
+      [
+        {
+          productId,
+          branchId,
+          type: "adjustment",
+          change: adjustment,
+          quantityAfter: updated ? updated.quantity : null,
+          referenceId: null,
+          userId: req.user._id,
+          reason,
+        },
+      ],
+      { session },
+    );
+
     await session.commitTransaction();
 
     res.status(200).json({
@@ -195,8 +226,73 @@ const adjustInventory = async (req, res) => {
   }
 };
 
+/**
+ * getInventoryHistory
+ * Chronological audit trail of every stock change for a product,
+ * optionally scoped to a branch and paginated.
+ */
+const getInventoryHistory = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { branchId, from, to, page = 1, limit = 50 } = req.query;
+
+    const filter = { productId };
+    if (branchId) filter.branchId = branchId;
+
+    if (from || to) {
+      filter.createdAt = {};
+      if (from) filter.createdAt.$gte = new Date(from);
+      if (to) filter.createdAt.$lte = new Date(to);
+    }
+
+    if (
+      (from && isNaN(new Date(from).getTime())) ||
+      (to && isNaN(new Date(to).getTime()))
+    ) {
+      return res.status(400).json({
+        status: "failed",
+        msg: "Invalid date format. Use ISO 8601",
+      });
+    }
+
+    const skip = (page - 1) * limit;
+
+    const logs = await InventoryLog.find(filter)
+      .populate("userId", "name email")
+      .skip(skip)
+      .limit(Number(limit))
+      .sort({ createdAt: 1 });
+
+    const total = await InventoryLog.countDocuments(filter);
+
+    res.status(200).json({
+      status: "success",
+      count: logs.length,
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit),
+      data: logs,
+    });
+  } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        status: "failed",
+        msg: "Invalid product or branch ID format",
+      });
+    }
+
+    console.error("Get Inventory History Error:", error);
+    res.status(500).json({
+      status: "failed",
+      msg: "Failed to fetch inventory history",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getInventoryByBranch,
   getLowStock,
   adjustInventory,
+  getInventoryHistory,
 };

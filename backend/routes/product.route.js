@@ -7,12 +7,15 @@ const {
   updateProduct,
   deleteProduct,
   getProductsByCategory,
+  lookupProduct,
 } = require("../controllers/product.controller");
 const authProtect = require("../middleware/auth.middleware");
 const isAllowed = require("../middleware/allowedRole.middleware");
 
 // read endpoints: any authenticated role
 router.get("/", authProtect, getAllProducts);
+// fast barcode/SKU lookup for POS scanning (must come before /:id)
+router.get("/lookup", authProtect, lookupProduct);
 router.get("/category/:category", authProtect, getProductsByCategory);
 router.get("/:id", authProtect, getProductById);
 

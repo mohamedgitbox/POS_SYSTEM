@@ -1,5 +1,6 @@
 const Customer = require("../models/Customer");
 const Branch = require("../models/Branch");
+const assertBranchAccess = require("../utils/assertBranchAccess");
 
 const getAllCustomers = async (req, res) => {
   try {
@@ -81,12 +82,24 @@ const getCustomerById = async (req, res) => {
 
 const createCustomer = async (req, res) => {
   try {
-    const { name, phone, email, address, branchId } = req.body;
+    const { name, phone, email, address, branchId: requestedBranchId } =
+      req.body;
 
-    if (!name || !branchId) {
+    // resolve the effective branch (server-side, role-aware)
+    let branchId;
+    try {
+      branchId = assertBranchAccess(req.user, requestedBranchId);
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
+    if (!name) {
       return res.status(400).json({
         status: "failed",
-        msg: "Please provide customer name and branchId",
+        msg: "Please provide customer name",
       });
     }
 

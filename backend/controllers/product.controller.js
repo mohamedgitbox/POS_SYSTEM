@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const Inventory = require('../models/Inventory');
 
 const getAllProducts = async (req, res) => {
   try {
@@ -269,11 +270,76 @@ const getProductsByCategory = async (req, res) => {
   }
 };
 
+/**
+ * lookupProduct
+ * POS-scanning fast path: resolve a product by barcode or SKU and include the
+ * live stock count for a branch in a single round-trip. Both parameters are
+ * optional; at least one must be supplied.
+ */
+const lookupProduct = async (req, res) => {
+  try {
+    const { barcode, sku, branchId } = req.query;
+
+    if (!barcode && !sku) {
+      return res.status(400).json({
+        status: 'failed',
+        msg: 'Provide at least one of: barcode, sku',
+      });
+    }
+
+    const filter = {};
+    if (barcode) filter.barcode = barcode;
+    if (sku) filter.sku = sku.toUpperCase();
+
+    const product = await Product.findOne(filter);
+
+    if (!product) {
+      return res.status(404).json({
+        status: 'failed',
+        msg: 'Product not found',
+      });
+    }
+
+    let stock = null;
+    if (branchId) {
+      stock = await Inventory.findOne({
+        productId: product._id,
+        branchId,
+      });
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        product,
+        stock: stock
+          ? { quantity: stock.quantity, reserved: stock.reserved, available: stock.quantity - stock.reserved }
+          : { quantity: 0, available: 0 },
+      },
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        status: 'failed',
+        msg: 'Invalid branch ID format',
+      });
+    }
+
+    console.error('Lookup Product Error:', error);
+    res.status(500).json({
+      status: 'failed',
+      msg: 'Failed to look up product',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getAllProducts,
   getProductById,
   createProduct,
   updateProduct,
   deleteProduct,
-  getProductsByCategory
+  getProductsByCategory,
+  lookupProduct,
 };

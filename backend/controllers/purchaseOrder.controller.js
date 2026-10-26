@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
 const PurchaseOrder = require("../models/PurchaseOrder");
 const Inventory = require("../models/Inventory");
+const InventoryLog = require("../models/InventoryLog");
 const Product = require("../models/Product");
 const Branch = require("../models/Branch");
+const assertBranchAccess = require("../utils/assertBranchAccess");
 
 const getAllPurchaseOrders = async (req, res) => {
   try {
@@ -84,12 +86,28 @@ const getPurchaseOrderById = async (req, res) => {
 
 const createPurchaseOrder = async (req, res) => {
   try {
-    const { supplierName, branchId, items, status } = req.body;
+    const { supplierName, branchId: requestedBranchId, items, status } =
+      req.body;
 
-    if (!supplierName || !branchId || !Array.isArray(items) || items.length === 0) {
+    // resolve the effective branch (server-side, role-aware)
+    let branchId;
+    try {
+      branchId = assertBranchAccess(req.user, requestedBranchId);
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
+    if (
+      !supplierName ||
+      !Array.isArray(items) ||
+      items.length === 0
+    ) {
       return res.status(400).json({
         status: "failed",
-        msg: "Please provide supplierName, branchId, and a non-empty items array",
+        msg: "Please provide supplierName and a non-empty items array",
       });
     }
 
@@ -343,6 +361,22 @@ const receivePurchaseOrder = async (req, res) => {
           { session },
         );
       }
+
+      // audit trail for each item received
+      await InventoryLog.create(
+        [
+          {
+            productId: item.productId,
+            branchId: order.branchId,
+            type: "purchase_order",
+            change: item.orderedQty,
+            referenceId: order._id,
+            userId: req.user._id,
+            reason: `PO ${order.poNumber} received from ${order.supplierName}`,
+          },
+        ],
+        { session },
+      );
     }
 
     order.status = "received";

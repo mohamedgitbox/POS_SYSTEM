@@ -59,7 +59,7 @@ const saleSchema = new mongoose.Schema(
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Customer",
-      default: "null",
+      default: null,
     },
     customerInfo: {
       name: { type: String, trim: true, default: "Walk-in Customer" },
@@ -95,8 +95,13 @@ const saleSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["completed", "pending", "cancelled"],
+      enum: ["completed", "pending", "cancelled", "returned"],
       default: "completed",
+    },
+    shiftId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Shift",
+      default: null,
     },
   },
   {
@@ -107,5 +112,6 @@ const saleSchema = new mongoose.Schema(
 
 saleSchema.index({ branchId: 1, createdAt: -1 });
 saleSchema.index({ status: 1 });
+saleSchema.index({ shiftId: 1 });
 
 module.exports = mongoose.model("Sale", saleSchema);

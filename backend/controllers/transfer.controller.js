@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
 const Transfer = require("../models/Transfer");
 const Inventory = require("../models/Inventory");
+const InventoryLog = require("../models/InventoryLog");
 const Product = require("../models/Product");
 const Branch = require("../models/Branch");
+const assertBranchAccess = require("../utils/assertBranchAccess");
 
 const getAllTransfers = async (req, res) => {
   try {
@@ -89,12 +91,24 @@ const getTransferById = async (req, res) => {
 
 const createTransfer = async (req, res) => {
   try {
-    const { sourceBranchId, destinationBranchId, items } = req.body;
+    const { sourceBranchId: requestedSourceBranchId, destinationBranchId, items } =
+      req.body;
 
-    if (!sourceBranchId || !destinationBranchId) {
+    // a scoped role may only pull stock from its own branch
+    let sourceBranchId;
+    try {
+      sourceBranchId = assertBranchAccess(req.user, requestedSourceBranchId);
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
+    if (!destinationBranchId) {
       return res.status(400).json({
         status: "failed",
-        msg: "Please provide sourceBranchId and destinationBranchId",
+        msg: "Please provide destinationBranchId",
       });
     }
 
@@ -305,11 +319,13 @@ const receiveTransfer = async (req, res) => {
       });
     }
 
-    // mark in-transit within the same transaction if still pending
-    if (transfer.status === "pending") {
-      transfer.status = "in_transit";
-      transfer.approvedBy = req.user._id;
-      await transfer.save({ session });
+    // a transfer must already be in_transit before /receive is called
+    if (transfer.status !== "in_transit") {
+      await session.abortTransaction();
+      return res.status(400).json({
+        status: "failed",
+        msg: `Only transfers in transit can be received. Current status: ${transfer.status}. Use PUT /api/transfers/:id to set it to 'in_transit' first.`,
+      });
     }
 
     for (const item of transfer.items) {
@@ -340,6 +356,22 @@ const receiveTransfer = async (req, res) => {
         { session },
       );
 
+      // audit: stock leaving the source branch
+      await InventoryLog.create(
+        [
+          {
+            productId: item.productId,
+            branchId: transfer.sourceBranchId,
+            type: "transfer_out",
+            change: -item.quantity,
+            referenceId: transfer._id,
+            userId: req.user._id,
+            reason: `Transfer ${transfer.transferNumber} to branch ${transfer.destinationBranchId}`,
+          },
+        ],
+        { session },
+      );
+
       const destinationInventory = await Inventory.findOne({
         productId: item.productId,
         branchId: transfer.destinationBranchId,
@@ -364,6 +396,22 @@ const receiveTransfer = async (req, res) => {
           { session },
         );
       }
+
+      // audit: stock arriving at the destination branch
+      await InventoryLog.create(
+        [
+          {
+            productId: item.productId,
+            branchId: transfer.destinationBranchId,
+            type: "transfer_in",
+            change: item.quantity,
+            referenceId: transfer._id,
+            userId: req.user._id,
+            reason: `Transfer ${transfer.transferNumber} from branch ${transfer.sourceBranchId}`,
+          },
+        ],
+        { session },
+      );
     }
 
     transfer.status = "received";
