@@ -1,7 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-
 const authProtect = async (req, res, next) => {
   try {
     let token;
@@ -22,7 +21,7 @@ const authProtect = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const currentUser = await User.findById(decoded.id);
+    const currentUser = await User.findById(decoded._id);
 
     if (!currentUser) {
       return res.status(401).json({
@@ -31,19 +30,25 @@ const authProtect = async (req, res, next) => {
       });
     }
 
-    if (currentUser.changedPasswordAfter && currentUser.changedPasswordAfter(decoded.iat)) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid Credentials: User recently changed password. Please log in again.",
-      });
+    if (currentUser.passwordChangedAt) {
+      const changedTimestamp = parseInt(
+        currentUser.passwordChangedAt.getTime() / 1000,
+        10
+      );
+
+      if (decoded.iat < changedTimestamp) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid Credentials: User recently changed password. Please log in again.",
+        });
+      }
     }
 
     req.user = currentUser;
     next();
-    
   } catch (error) {
     let errorMessage = "Invalid Credentials: Token verification failed";
-    
+
     if (error.name === "TokenExpiredError") {
       errorMessage = "Invalid Credentials: Token has expired";
     } else if (error.name === "JsonWebTokenError") {
