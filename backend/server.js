@@ -20,7 +20,10 @@ app.use("/api/auth", require("./routes/auth.route"));
 app.use("/api/users", require("./routes/user.route"));
 app.use("/api/branches", require("./routes/branch.route"));
 app.use("/api/products", require("./routes/product.route"));
+app.use("/api/customers", require("./routes/customer.route"));
 app.use("/api/inventory", require("./routes/inventory.route"));
+app.use("/api/purchase-orders", require("./routes/purchaseOrder.route"));
+app.use("/api/transfers", require("./routes/transfer.route"));
 app.use("/api/sales", require("./routes/sale.route"));
 
 // the main route

@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
 const dotenv = require("dotenv");
 const path = require("path");
 
@@ -26,12 +25,7 @@ const models = {
 };
 for (const [name, model] of Object.entries(models)) {
   if (typeof model.deleteMany !== "function") {
-    console.error(
-      `Critical error: Model ${name} was not properly exported from its file.`,
-    );
-    console.error(
-      `Make sure to include: module.exports = mongoose.model('${name}', ...schema);`,
-    );
+    console.error(`Critical error: Model ${name} was not properly exported.`);
     process.exit(1);
   }
 }
@@ -41,16 +35,16 @@ const connectDB = async () => {
     await mongoose.connect(
       process.env.MONGO_URI || "mongodb://localhost:27017/pos_system",
     );
-    console.log("Successfully connected to the database...");
+    console.log("✅ Successfully connected to the database...");
   } catch (err) {
-    console.error("Failed to connect to the database:", err.message);
+    console.error("❌ Failed to connect to the database:", err.message);
     process.exit(1);
   }
 };
 
 const seedDatabase = async () => {
   try {
-    console.log("Clearing old data and indexes to ensure no conflicts...");
+    console.log("🧹 Clearing old data and indexes to ensure no conflicts...");
 
     const dropCollection = async (model) => {
       try {
@@ -58,7 +52,7 @@ const seedDatabase = async () => {
       } catch (err) {
         if (err.codeName !== "NamespaceNotFound") {
           console.warn(
-            `Warning when clearing collection ${model.modelName}:`,
+            `⚠️ Warning when clearing collection ${model.modelName}:`,
             err.message,
           );
         }
@@ -74,9 +68,9 @@ const seedDatabase = async () => {
     await dropCollection(User);
     await dropCollection(Branch);
 
-    console.log("Successfully cleared old data and indexes.");
+    console.log("✅ Successfully cleared old data and indexes.\n");
 
-    console.log("Creating branches...");
+    console.log("🏢 Creating branches...");
     const branch1 = await Branch.create({
       name: "Main Branch",
       code: "MAIN01",
@@ -107,7 +101,7 @@ const seedDatabase = async () => {
       isActive: true,
     });
 
-    console.log("Creating users...");
+    console.log("👥 Creating users...");
     const superAdmin = await User.create({
       name: "General Manager",
       email: "admin@pos.com",
@@ -137,7 +131,7 @@ const seedDatabase = async () => {
     branch1.managerId = manager1._id;
     await branch1.save();
 
-    console.log("Creating products...");
+    console.log("📦 Creating products...");
     const product1 = await Product.create({
       name: "HP Laptop 15",
       sku: "LAP-HP-15",
@@ -174,7 +168,7 @@ const seedDatabase = async () => {
       createdBy: superAdmin._id,
     });
 
-    console.log("Creating inventory records...");
+    console.log("📊 Creating inventory records...");
     await Inventory.create([
       {
         productId: product1._id,
@@ -213,7 +207,7 @@ const seedDatabase = async () => {
       },
     ]);
 
-    console.log("Creating customers...");
+    console.log("🙍‍♂️ Creating customers...");
     const customer1 = await Customer.create({
       name: "Ahmed Mohamed",
       phone: "01012345678",
@@ -224,7 +218,7 @@ const seedDatabase = async () => {
       isActive: true,
     });
 
-    console.log("Creating purchase orders...");
+    console.log("🛒 Creating purchase orders...");
     await PurchaseOrder.create({
       poNumber: "PO-2023-001",
       supplierName: "Tech Supplies Company",
@@ -238,7 +232,7 @@ const seedDatabase = async () => {
       status: "received",
     });
 
-    console.log("Creating sales transactions...");
+    console.log("💰 Creating sales transactions...");
     await Sale.create({
       saleNumber: "SALE-2023-001",
       branchId: branch1._id,
@@ -269,7 +263,7 @@ const seedDatabase = async () => {
       status: "completed",
     });
 
-    console.log("Creating inventory transfers...");
+    console.log("🔄 Creating inventory transfers...");
     await Transfer.create({
       transferNumber: "TRF-2023-001",
       sourceBranchId: branch1._id,
@@ -284,18 +278,18 @@ const seedDatabase = async () => {
       approvedBy: superAdmin._id,
     });
 
-    console.log("Database seeding completed successfully!");
+    console.log("\n Database seeding completed successfully!");
 
     console.log("==================================================");
-    console.log("Branch 1 ID (Main Branch) :", branch1._id.toString());
-    console.log("Product 1 ID (HP Laptop)  :", product1._id.toString());
-    console.log("Product 2 ID (Mouse)      :", product2._id.toString());
-    console.log("Customer 1 ID (Ahmed)     :", customer1._id.toString());
+    console.log("Branch 1 ID (Main)    :", branch1._id.toString());
+    console.log("Product 1 ID (Laptop) :", product1._id.toString());
+    console.log("Product 2 ID (Mouse)  :", product2._id.toString());
+    console.log("Customer 1 ID (Ahmed) :", customer1._id.toString());
     console.log("==================================================\n");
 
     process.exit(0);
   } catch (error) {
-    console.error("Error occurred while seeding data:", error);
+    console.error("❌ Error occurred while seeding data:", error);
     process.exit(1);
   }
 };
