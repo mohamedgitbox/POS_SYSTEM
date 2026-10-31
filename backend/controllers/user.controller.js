@@ -221,19 +221,18 @@ const updateUser = async (req, res) => {
       }
     }
 
-    const updates = {};
-    if (name) updates.name = name;
-    if (email) updates.email = email;
-    if (role) updates.role = role;
-    if (branchId !== undefined) updates.branchId = branchId || null;
-    if (isActive !== undefined) updates.isActive = isActive;
-    if (password) updates.password = password;
+      const updates = {};
+      if (name) updates.name = name;
+      if (email) updates.email = email;
+      if (role) updates.role = role;
+      if (branchId !== undefined) updates.branchId = branchId || null;
+      if (isActive !== undefined) updates.isActive = isActive;
+      if (password) updates.password = password;
 
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      updates,
-      { new: true, runValidators: true },
-    );
+    const user = await User.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
 
     if (!user) {
       return res.status(404).json({
