@@ -1,21 +1,8 @@
-import { Bell, User, Branch } from "lucide-react";
+import { Bell, Building2 } from "lucide-react";
 import { useAuthStore } from "../../store/useAuthStore";
-import { useState, useEffect, useRef } from "react";
 
 export default function Header() {
   const { user } = useAuthStore();
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setShowUserMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString("ar-EG", {
@@ -26,18 +13,11 @@ export default function Header() {
     });
   };
 
-  const formatTime = (date) => {
-    return new Date(date).toLocaleTimeString("ar-EG", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
   return (
     <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-40">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-sm font-medium">
-          <Branch className="w-4 h-4" />
+          <Building2 className="w-4 h-4" />
           <span>
             {user?.branchId?.name || "الفرع الرئيسي"}
           </span>

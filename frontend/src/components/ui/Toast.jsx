@@ -1,10 +1,23 @@
-import { motion, AnimatePresence } from "motion";
-import { CheckCircle, AlertCircle, X } from "lucide-react";
+import { useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { CheckCircle, AlertCircle, Info, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useToastStore } from "../../store/useToastStore";
 
+// Register one timeout per toast; clean up on change
+function useAutoDismiss(toasts, removeToast) {
+  useEffect(() => {
+    const timers = toasts.map((toast) =>
+      setTimeout(() => removeToast(toast.id), toast.duration ?? 4000)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [toasts, removeToast]);
+}
+
 export default function Toast() {
   const { toasts, removeToast } = useToastStore();
+
+  useAutoDismiss(toasts, removeToast);
 
   return (
     <AnimatePresence>
@@ -37,7 +50,7 @@ export default function Toast() {
             <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
           )}
           {toast.type === "info" && (
-            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <Info className="w-5 h-5 flex-shrink-0 mt-0.5" />
           )}
           <div className="flex-1">
             {toast.title && (

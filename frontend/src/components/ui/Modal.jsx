@@ -1,7 +1,6 @@
-import { motion, AnimatePresence } from "motion";
+import { motion, AnimatePresence } from "motion/react";
 import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { useAuthStore } from "../../store/useAuthStore";
 
 export default function Modal({
   isOpen,
@@ -11,8 +10,6 @@ export default function Modal({
   footer,
   size = "md",
 }) {
-  const { user } = useAuthStore();
-
   const sizeClasses = {
     sm: "max-w-md",
     md: "max-w-lg",

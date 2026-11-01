@@ -17,6 +17,6 @@ describe("useCartStore", () => {
 });
 
 // Run a quick in-memory test manually
-const { create } = require("zustand");
-const mock = create((set) => ({ items: [] }));
+import { create } from "zustand";
+const mock = create(() => ({ items: [] }));
 console.log("Cart store smoke test passed:", mock.getState().items.length === 0);

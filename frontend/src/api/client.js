@@ -2,9 +2,10 @@ import axios from "axios";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
-// Create axios instance with default config
+// All backend routes are mounted under "/api/*" — normalize the base so the
+// pages can use short paths like "/products" (→ http://host:4000/api/products)
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: `${API_BASE_URL.replace(/\/$/, "")}/api`,
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",

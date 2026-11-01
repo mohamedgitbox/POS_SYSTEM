@@ -2,28 +2,28 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   ShoppingCart,
-  Package,
+  Box,
   Receipt,
+  Clock,
   BarChart3,
   Settings,
   LogOut,
   Users,
-  Store,
 } from "lucide-react";
-import { useAuthStore } from "../store/useAuthStore";
+import { useAuthStore } from "../../store/useAuthStore";
 
 const navItems = [
   { to: "/dashboard", label: "لوحة التحكم", icon: LayoutDashboard },
   { to: "/pos", label: "نقطة البيع", icon: ShoppingCart },
-  { to: "/inventory", label: "المخزون", icon: Package },
+  { to: "/inventory", label: "المخزون", icon: Box },
   { to: "/sales", label: "المبيعات", icon: Receipt },
+  { to: "/shifts", label: "الورديات", icon: Clock },
+  { to: "/customers", label: "العملاء", icon: Users },
   { to: "/reports", label: "التقارير", icon: BarChart3 },
-  { to: "/transfers", label: "النقل بين الفروع", icon: Store },
 ];
 
 const adminNavItems = [
   { to: "/settings", label: "الإعدادات", icon: Settings },
-  { to: "/users", label: "إدارة المستخدمين", icon: Users },
 ];
 
 export default function Sidebar() {

@@ -1,13 +1,8 @@
+/* eslint-disable react-refresh/only-export-components */
 import { forwardRef } from "react";
 import { cn } from "../../lib/utils";
 
-const buttonVariants = ({
-  variant = "primary",
-  size = "md",
-  className,
-  disabled,
-  ...props
-}) => {
+const buttonVariants = ({ variant = "primary", size = "md", className }) => {
   const base =
     "inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
   const variants = {
@@ -29,24 +24,23 @@ const buttonVariants = ({
     xl: "px-8 py-4 text-lg",
   };
 
-  return (
-    <button
-      className={cn(base, variants[variant], sizes[size], className)}
-      disabled={disabled}
-      {...props}
-    />
-  );
+  return cn(base, variants[variant], sizes[size], className);
 };
 
-const Button = forwardRef(({ className, variant, size, ...props }, ref) => {
-  return (
-    <button
-      className={cn(buttonVariants({ variant, size, className }))}
-      ref={ref}
-      {...props}
-    />
-  );
-});
+const Button = forwardRef(
+  ({ className, variant, size, disabled, children, ...props }, ref) => {
+    return (
+      <button
+        ref={ref}
+        disabled={disabled}
+        {...props}
+        className={buttonVariants({ variant, size, className })}
+      >
+        {children}
+      </button>
+    );
+  }
+);
 Button.displayName = "Button";
 
 export { Button, buttonVariants };
