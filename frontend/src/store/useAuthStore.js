@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 const USER_KEY = "pos_user";
 
-export const useAuthStore = create((set) => ({
+export const useAuthStore = create((set, get) => ({
   user: null,
   token: null,
   isAuthenticated: false,
@@ -44,11 +44,11 @@ export const useAuthStore = create((set) => ({
     });
   },
 
-  get branchId() {
-    return this.user?.branchId || null;
+  getBranchId: () => {
+    return get().user?.branchId || get().user?.branch || null;
   },
 
   hasRole: (role) => {
-    return Boolean(this.user?.role === role);
+    return Boolean(get().user?.role === role);
   },
 }));

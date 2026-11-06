@@ -1,10 +1,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-const TAX_RATE = 0.05; // 5% tax
+const TAX_RATE = 0.05;
 
 const findItemIndex = (items, productId) =>
   items.findIndex((item) => item.productId === productId);
+
+const computeSubtotal = (items) =>
+  items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
 export const useCartStore = create(
   persist(
@@ -58,28 +61,14 @@ export const useCartStore = create(
         set({ items: [] });
       },
 
-      get subtotal() {
-        return get().items.reduce(
-          (sum, item) => sum + item.price * item.quantity,
-          0
-        );
+      subtotal: () => computeSubtotal(get().items),
+      tax: () => computeSubtotal(get().items) * TAX_RATE,
+      discount: () => 0,
+      total: () => {
+        const sub = computeSubtotal(get().items);
+        return sub + sub * TAX_RATE;
       },
-
-      get tax() {
-        return get().subtotal * TAX_RATE;
-      },
-
-      get discount() {
-        return 0;
-      },
-
-      get total() {
-        return get().subtotal + get().tax - get().discount;
-      },
-
-      get itemCount() {
-        return get().items.reduce((sum, item) => sum + item.quantity, 0);
-      },
+      itemCount: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
     }),
     {
       name: "pos-cart",

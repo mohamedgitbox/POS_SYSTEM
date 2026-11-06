@@ -9,12 +9,8 @@ const formatMoney = (value) =>
   })} ج.م`;
 
 export default function CartPanel({ onCheckout, checkoutDisabled = false }) {
-  const { items, updateQuantity, removeItem, clearCart, itemCount } =
+  const { items, updateQuantity, removeItem, clearCart, itemCount, subtotal, tax, total } =
     useCartStore();
-
-  const subtotal = useCartStore((s) => s.subtotal);
-  const tax = useCartStore((s) => s.tax);
-  const total = useCartStore((s) => s.total);
 
   return (
     <div className="flex flex-col h-full bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -24,7 +20,7 @@ export default function CartPanel({ onCheckout, checkoutDisabled = false }) {
           <ShoppingCart className="w-5 h-5 text-blue-600" />
           <h3 className="font-bold text-slate-900">السلة الحالية</h3>
           <span className="bg-blue-600 text-white text-xs font-bold rounded-full min-w-6 h-6 px-2 inline-flex items-center justify-center">
-            {itemCount}
+            {itemCount()}
           </span>
         </div>
         {items.length > 0 && (

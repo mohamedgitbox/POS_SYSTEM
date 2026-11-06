@@ -17,8 +17,7 @@ export default function Sales() {
     queryKey: ["branchesList"],
     queryFn: () => api.get("/branches"),
   });
-  const branches = branchesData?.data || [];
-
+  const branches = Array.isArray(branchesData?.data) ? branchesData.data : [];
   const { data, isLoading, error } = useQuery({
     queryKey: ["sales", { page, limit: 20, search, status, branch }],
     queryFn: () =>
