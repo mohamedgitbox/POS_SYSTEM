@@ -7,6 +7,11 @@ const Shift = require("../models/Shift");
 const Refund = require("../models/Refund");
 const InventoryLog = require("../models/InventoryLog");
 const assertBranchAccess = require("../utils/assertBranchAccess");
+const resolveBranchScope = require("../utils/resolveBranchScope");
+const {
+  normalizeNonNegativeMoney,
+  computeSaleTotal,
+} = require("../utils/saleTotals");
 
 /**
  * createSale
@@ -42,13 +47,29 @@ const createSale = async (req, res) => {
   session.startTransaction();
 
   try {
-    const {
+        const {
       customerId,
       items,
       paymentMethod,
-      tax = 0,
-      discount = 0,
     } = req.body;
+
+    const { tax: normalizedTax, error: taxError } = normalizeNonNegativeMoney(req.body.tax, "Tax");
+    if (taxError) {
+      await session.abortTransaction();
+      return res.status(400).json({ status: "failed", msg: taxError });
+    }
+
+    const { value: discount, error: discountError } = normalizeNonNegativeMoney(
+      req.body.discount,
+      "Discount",
+    );
+    if (discountError) {
+      await session.abortTransaction();
+      return res.status(400).json({ status: "failed", msg: discountError });
+    }
+
+    const tax = normalizedTax;
+
     const branchId = effectiveBranchId;
     const cashierId = req.user._id;
 
@@ -143,17 +164,32 @@ const createSale = async (req, res) => {
       });
     }
 
-    const updatedInventories = [];
+        const updatedInventories = [];
     for (const item of items) {
-      const updated = await Inventory.findOneAndUpdate(
-        { productId: item.productId, branchId: branchId },
+      const result = await Inventory.updateOne(
+        { productId: item.productId, branchId: branchId, quantity: { $gte: item.quantity } },
         { $inc: { quantity: -item.quantity } },
-        { new: true, session },
+        { session },
       );
+      if (result.matchedCount === 0) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          status: "failed",
+          msg: `Insufficient stock or concurrent modification for product in this branch`,
+        });
+      }
+      const updated = await Inventory.findOne({ productId: item.productId, branchId: branchId }).session(session);
       updatedInventories.push({ productId: item.productId, quantity: updated ? updated.quantity : null });
     }
 
-    const total = subtotal + tax - discount;
+    const totalResult = computeSaleTotal(subtotal, tax, discount);
+    if (!totalResult.ok) {
+      await session.abortTransaction();
+      return res.status(400).json({ status: "failed", msg: totalResult.error });
+    }
+
+    const total = totalResult.total;
+
     const saleNumber = `SALE-${Date.now()}`;
 
     const activeShift = await Shift.findOne({
@@ -249,6 +285,16 @@ const createReturn = async (req, res) => {
       });
     }
 
+    try {
+      assertBranchAccess(req.user, originalSale.branchId.toString());
+    } catch (err) {
+      await session.abortTransaction();
+      return res.status(err.statusCode || 403).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
     if (originalSale.status === "cancelled") {
       await session.abortTransaction();
       return res.status(400).json({
@@ -257,7 +303,6 @@ const createReturn = async (req, res) => {
       });
     }
 
-    // only completed sales are refundable
     if (originalSale.status !== "completed") {
       await session.abortTransaction();
       return res.status(400).json({
@@ -276,9 +321,18 @@ const createReturn = async (req, res) => {
       });
     }
 
-    // validate each returned item against the original sale quantities
+    const existingRefunds = await Refund.find({ saleId: originalSale._id, status: "completed" }).session(session);
+    const alreadyReturned = {};
+    for (const refund of existingRefunds) {
+      for (const ri of refund.items) {
+        const pid = ri.productId.toString();
+        alreadyReturned[pid] = (alreadyReturned[pid] || 0) + ri.quantity;
+      }
+    }
+
     const returnLines = [];
     let refundTotal = 0;
+    const seenProducts = new Set();
 
     for (const item of items) {
       if (!item.productId || !item.quantity) {
@@ -288,6 +342,15 @@ const createReturn = async (req, res) => {
           msg: "Each returned item must include productId and quantity",
         });
       }
+
+      if (seenProducts.has(item.productId)) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          status: "failed",
+          msg: `Duplicate product ${item.productId} in return items. Merge quantities into a single line.`,
+        });
+      }
+      seenProducts.add(item.productId);
 
       if (!Number.isInteger(item.quantity) || item.quantity < 1) {
         await session.abortTransaction();
@@ -309,11 +372,14 @@ const createReturn = async (req, res) => {
         });
       }
 
-      if (originalItem.quantity < item.quantity) {
+      const prevReturned = alreadyReturned[item.productId] || 0;
+      const remainingReturnable = originalItem.quantity - prevReturned;
+
+      if (item.quantity > remainingReturnable) {
         await session.abortTransaction();
         return res.status(400).json({
           status: "failed",
-          msg: `Cannot return ${item.quantity} of ${originalItem.productName}. Original quantity was ${originalItem.quantity}`,
+          msg: `Cannot return ${item.quantity} of ${originalItem.productName}. Only ${remainingReturnable} remain returnable (${prevReturned} already returned)`,
         });
       }
 
@@ -329,21 +395,19 @@ const createReturn = async (req, res) => {
       });
     }
 
-    // restore stock transactionally and log each change
     for (const line of returnLines) {
-      await Inventory.findOneAndUpdate(
+      await Inventory.updateOne(
         { productId: line.productId, branchId: originalSale.branchId },
         { $inc: { quantity: line.quantity } },
         { session },
       );
     }
 
-    // full return? mark the original sale as "returned", otherwise keep "completed"
     const totalOriginalQty = originalSale.items.reduce(
       (sum, i) => sum + i.quantity,
       0,
     );
-    const totalReturnedQty = returnLines.reduce((sum, i) => sum + i.quantity, 0);
+    const totalReturnedQty = Object.values(alreadyReturned).reduce((s, v) => s + v, 0) + returnLines.reduce((sum, i) => sum + i.quantity, 0);
     const isFullReturn = totalReturnedQty >= totalOriginalQty;
 
     if (isFullReturn) {
@@ -352,6 +416,18 @@ const createReturn = async (req, res) => {
     }
 
     const refundNumber = `RFND-${Date.now()}`;
+
+    // Attach the refund to the shift whose drawer is actually being adjusted:
+    // the open shift of the cashier processing the return in this branch.
+    // Fall back to the original sale's shift when none is open (non-cash
+    // refunds never touch the drawer, and cash refunds processed without an
+    // open shift cannot be reconciled anyway).
+    const currentShift = await Shift.findOne({
+      branchId: originalSale.branchId,
+      cashierId: req.user._id,
+      status: "open",
+    }).session(session);
+
     const refund = await Refund.create(
       [
         {
@@ -363,12 +439,13 @@ const createReturn = async (req, res) => {
           total: refundTotal,
           reason: reason || "",
           status: "completed",
+          shiftId: (currentShift ? currentShift._id : originalSale.shiftId) || null,
+          paymentMethod: originalSale.paymentMethod || "cash",
         },
       ],
       { session },
     );
 
-    // audit trail for restocked items
     await InventoryLog.insertMany(
       returnLines.map((line) => ({
         productId: line.productId,
@@ -420,11 +497,21 @@ const createReturn = async (req, res) => {
 
 const getSales = async (req, res) => {
   try {
-    const { branchId: requestedBranchId, from, to, status, search, page = 1, limit = 10 } = req.query;
+    const {
+      branchId: requestedBranchId,
+      from,
+      to,
+      status,
+      search,
+      page = 1,
+      limit = 10,
+    } = req.query;
 
+    // consistent scope rules: scoped roles are locked to their own branch,
+    // super_admin may filter a specific branch or view all branches
     let branchId;
     try {
-      branchId = assertBranchAccess(req.user, requestedBranchId);
+      branchId = resolveBranchScope(req.user, requestedBranchId);
     } catch (err) {
       return res.status(err.statusCode || 400).json({
         status: "failed",
@@ -510,6 +597,15 @@ const getSaleById = async (req, res) => {
       });
     }
 
+    try {
+      assertBranchAccess(req.user, sale.branchId._id ? sale.branchId._id.toString() : sale.branchId.toString());
+    } catch (err) {
+      return res.status(err.statusCode || 403).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
     res.status(200).json({
       status: "success",
       data: sale,
@@ -533,7 +629,19 @@ const getSaleById = async (req, res) => {
 
 const getSalesSummary = async (req, res) => {
   try {
-    const { branchId, from, to } = req.query;
+    const { branchId: requestedBranchId, from, to } = req.query;
+
+    // branch access control: scoped roles can only summarize their own branch,
+    // super_admin can filter a specific branch or see the org-wide summary
+    let branchId;
+    try {
+      branchId = resolveBranchScope(req.user, requestedBranchId);
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
 
     const filter = { status: "completed" };
 

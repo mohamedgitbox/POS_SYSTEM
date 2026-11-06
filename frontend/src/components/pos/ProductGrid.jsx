@@ -5,6 +5,7 @@ import { api } from "../../lib/api";
 import { useCartStore } from "../../store/useCartStore";
 import { useToastStore } from "../../store/useToastStore";
 import { useAuthStore } from "../../store/useAuthStore";
+import { usePosBranchStore } from "../../store/usePosBranchStore";
 import { Skeleton } from "../ui/Skeleton";
 
 const CATEGORIES = [
@@ -30,13 +31,18 @@ export default function ProductGrid() {
   const { user } = useAuthStore();
   const addItem = useCartStore((s) => s.addItem);
   const { success, error: showError, info } = useToastStore();
+  const { branchId: posBranchId } = usePosBranchStore();
 
   const [scanValue, setScanValue] = useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
 
-  // Branch scope: cashier/branch_manager sell from their branch only
-  const branchId = user?.role === "super_admin" ? null : user?.branch || user?.branchId || null;
+  // Branch scope: cashier/branch_manager sell from their branch only;
+  // super_admin sells from the branch selected in the POS header
+  const branchId =
+    user?.role === "super_admin"
+      ? posBranchId
+      : user?.branch || user?.branchId || null;
 
   // Product catalog (price + identity)
   const { data: productsData, isLoading } = useQuery({

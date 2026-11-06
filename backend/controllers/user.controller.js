@@ -144,8 +144,21 @@ const getAllUsers = async (req, res) => {
 
     const { role, branchId, isActive } = req.query;
 
+    // branch scoping: branch_manager can only view users of their own branch;
+    // super_admin can view everyone, optionally filtered by branchId
+    if (req.user.role === "super_admin") {
+      if (branchId) filter.branchId = branchId;
+    } else {
+      if (!req.user.branchId) {
+        return res.status(403).json({
+          status: "failed",
+          msg: "You are not assigned to a branch",
+        });
+      }
+      filter.branchId = req.user.branchId;
+    }
+
     if (role) filter.role = role;
-    if (branchId) filter.branchId = branchId;
     if (isActive !== undefined) filter.isActive = isActive === "true";
 
     const users = await User.find(filter).populate("branchId", "name code");
@@ -174,6 +187,13 @@ const getAllUsers = async (req, res) => {
 
 const getUserById = async (req, res) => {
   try {
+    if (req.user.role !== "super_admin" && req.user._id.toString() !== req.params.id) {
+      return res.status(403).json({
+        status: "failed",
+        msg: "You can only view your own profile",
+      });
+    }
+
     const user = await User.findById(req.params.id).populate(
       "branchId",
       "name code",
@@ -221,18 +241,7 @@ const updateUser = async (req, res) => {
       }
     }
 
-      const updates = {};
-      if (name) updates.name = name;
-      if (email) updates.email = email;
-      if (role) updates.role = role;
-      if (branchId !== undefined) updates.branchId = branchId || null;
-      if (isActive !== undefined) updates.isActive = isActive;
-      if (password) updates.password = password;
-
-    const user = await User.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
-      runValidators: true,
-    });
+    const user = await User.findById(req.params.id);
 
     if (!user) {
       return res.status(404).json({
@@ -240,6 +249,15 @@ const updateUser = async (req, res) => {
         msg: "User not found",
       });
     }
+
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (role) user.role = role;
+    if (branchId !== undefined) user.branchId = branchId || null;
+    if (isActive !== undefined) user.isActive = isActive;
+    if (password) user.password = password;
+
+    await user.save();
 
     res.status(200).json({
       status: "success",

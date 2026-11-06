@@ -3,6 +3,7 @@ const Sale = require("../models/Sale");
 const Refund = require("../models/Refund");
 const Branch = require("../models/Branch");
 const assertBranchAccess = require("../utils/assertBranchAccess");
+const resolveBranchScope = require("../utils/resolveBranchScope");
 
 /**
  * openShift
@@ -112,6 +113,16 @@ const closeShift = async (req, res) => {
       });
     }
 
+    // branch permission: scope roles can only close shifts in their own branch
+    try {
+      assertBranchAccess(req.user, shift.branchId.toString());
+    } catch (err) {
+      return res.status(err.statusCode || 403).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
     // only the cashier who opened the shift (or a manager) may close it
     const isOwner = shift.cashierId.toString() === req.user._id.toString();
     if (!isOwner && req.user.role === "cashier") {
@@ -147,8 +158,9 @@ const closeShift = async (req, res) => {
       Refund.aggregate([
         {
           $match: {
-            branchId: shift.branchId,
+            shiftId: shift._id,
             status: "completed",
+            paymentMethod: "cash",
             createdAt: { $gte: since },
           },
         },
@@ -210,6 +222,16 @@ const getShiftSummary = async (req, res) => {
       });
     }
 
+    // branch permission: scoped roles may only view summaries in their branch
+    try {
+      assertBranchAccess(req.user, shift.branchId._id ? shift.branchId._id.toString() : shift.branchId.toString());
+    } catch (err) {
+      return res.status(err.statusCode || 403).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
     const sales = await Sale.find({ shiftId: shift._id }).select(
       "total paymentMethod status",
     );
@@ -221,12 +243,13 @@ const getShiftSummary = async (req, res) => {
       .reduce((sum, s) => sum + s.total, 0);
 
     const refunds = await Refund.find({
-      branchId: shift.branchId,
+      shiftId: shift._id,
+      status: "completed",
+      paymentMethod: "cash",
       createdAt: { $gte: shift.openedAt },
     }).select("total status");
 
     const totalRefunds = refunds
-      .filter((r) => r.status === "completed")
       .reduce((sum, r) => sum + r.total, 0);
 
     const expectedBalance =
@@ -279,9 +302,11 @@ const getShiftSummary = async (req, res) => {
  */
 const getActiveShift = async (req, res) => {
   try {
+    // scope rules: scoped roles always within their branch; super_admin can
+    // select a branch or omit branchId to see every open shift
     let branchId;
     try {
-      branchId = assertBranchAccess(
+      branchId = resolveBranchScope(
         req.user,
         req.query.branchId || req.params.branchId,
       );
@@ -319,9 +344,66 @@ const getActiveShift = async (req, res) => {
   }
 };
 
+const getShifts = async (req, res) => {
+  try {
+    const { branchId: requestedBranchId, status, page = 1, limit = 10 } = req.query;
+
+    // scope rules: scoped roles always within their branch; super_admin can
+    // select a branch or omit branchId to list every branch's shifts
+    let branchId;
+    try {
+      branchId = resolveBranchScope(req.user, requestedBranchId);
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
+    const filter = {};
+    if (branchId) filter.branchId = branchId;
+    if (status) filter.status = status;
+
+    const skip = (page - 1) * limit;
+
+    const shifts = await Shift.find(filter)
+      .populate("cashierId", "name email role")
+      .populate("branchId", "name code")
+      .skip(skip)
+      .limit(Number(limit))
+      .sort({ createdAt: -1 });
+
+    const total = await Shift.countDocuments(filter);
+
+    res.status(200).json({
+      status: "success",
+      count: shifts.length,
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit),
+      data: shifts,
+    });
+  } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        status: "failed",
+        msg: "Invalid filter ID format",
+      });
+    }
+
+    console.error("Get Shifts Error:", error);
+    res.status(500).json({
+      status: "failed",
+      msg: "Failed to fetch shifts",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   openShift,
   closeShift,
   getShiftSummary,
   getActiveShift,
+  getShifts,
 };

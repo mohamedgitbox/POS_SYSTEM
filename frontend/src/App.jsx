@@ -10,10 +10,13 @@ import Customers from "./pages/Customers";
 import Settings from "./pages/Settings";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Toast from "./components/ui/Toast";
+import SettingsSync from "./components/SettingsSync";
 
 function App() {
   return (
     <>
+      {/* keep general settings (tax rate, currency, ...) in sync from the backend */}
+      <SettingsSync />
       <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />

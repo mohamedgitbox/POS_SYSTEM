@@ -73,8 +73,8 @@ All responses use the shape `{ "status": "success"|"failed", "msg"?, "data"? }`.
 ### Users
 | Method & path | Roles | Notes |
 |---|---|---|
-| `GET /api/users` | `super_admin`, `branch_manager` | Filter: `role`, `branchId`, `isActive` |
-| `GET /api/users/:id` | auth | |
+| `GET /api/users` | `super_admin`, `branch_manager` | `super_admin` sees everyone (optional `branchId` filter); `branch_manager` is scoped to their own branch |
+| `GET /api/users/:id` | auth | Scoped roles may only view their own profile |
 | `PUT /api/users/:id` | `super_admin` | Can reassign `branchId`, set `isActive`/`password` |
 | `DELETE /api/users/:id` | `super_admin` | Self-delete is blocked |
 
@@ -128,24 +128,31 @@ All responses use the shape `{ "status": "success"|"failed", "msg"?, "data"? }`.
 ### Sales
 | Method & path | Roles | Notes |
 |---|---|---|
-| `GET /api/sales` | auth | Filter `branchId`, `from`, `to`, `status`; paginated |
+| `GET /api/sales` | auth | Filter `branchId`, `from`, `to`, `status`; paginated. Scoped roles always see their own branch; `super_admin` may filter by branch or omit it for ALL branches |
 | `GET /api/sales/:id` | auth | |
-| `GET /api/sales/summary` | `super_admin`, `branch_manager` | Aggregated totals + payment mix |
+| `GET /api/sales/summary` | `super_admin`, `branch_manager` | Aggregated totals + payment mix; same scope rules as `GET /api/sales` |
 | `POST /api/sales` | auth | Create a sale (branch resolved server-side; auto-links to open shift) |
-| `POST /api/sales/:id/return` | auth | Process a return/refund (transactional; restocks items) |
+| `POST /api/sales/:id/return` | auth | Process a return/refund (transactional; restocks items). The refund is booked to the refunding cashier's open shift in that branch, falling back to the original sale's shift |
 
 ### Reports
 | Method & path | Roles | Notes |
 |---|---|---|
-| `GET /api/reports/dashboard` | `super_admin`, `branch_manager` | Revenue, top products, revenue-by-branch, payment mix, low-stock alert; filter `branchId`, `from`, `to` |
+| `GET /api/reports/dashboard` | `super_admin`, `branch_manager` | Revenue, top products, revenue-by-branch, payment mix, low-stock alert; filter `branchId`, `from`, `to`. Scoped roles always see their own branch; `super_admin` may omit `branchId` for the org-wide view |
 
 ### Shifts
 | Method & path | Roles | Notes |
 |---|---|---|
-| `POST /api/shifts/open` | auth | Open a register shift (`openingBalance`) |
-| `GET /api/shifts/active` | auth | Currently open shift(s) for a branch |
-| `GET /api/shifts/:id/summary` | auth | Sales/refund totals + expected drawer balance |
-| `POST /api/shifts/:id/close` | auth | Close with `closingBalance`; computes `discrepancy` |
+| `GET /api/shifts` | auth, any role | List shifts; filter `branchId`, `status`; paginated. `super_admin` may omit `branchId` to list all branches |
+| `POST /api/shifts/open` | auth | Open a register shift (`openingBalance`). `super_admin` must also pass `branchId`; scoped roles get their branch server-side |
+| `GET /api/shifts/active` | auth | Currently open shift(s); `super_admin` may filter by branch or omit for all |
+| `GET /api/shifts/:id/summary` | auth | Sales/refund totals + expected drawer balance. Branch permission enforced (scoped roles: own branch only) |
+| `POST /api/shifts/:id/close` | auth | Close with `closingBalance`; computes `discrepancy`. Only the opening cashier (or manager of the same branch) may close |
+
+### Settings
+| Method & path | Roles | Notes |
+|---|---|---|
+| `GET /api/settings/general` | auth | General app settings (tax rate %, currency, currency symbol, low-stock threshold, allow-negative-stock) |
+| `PUT /api/settings/general` | `super_admin` | Partially update the general settings document. `taxRate` must be 0–100 |
 
 ---
 
@@ -206,8 +213,65 @@ A quick manual pass (run against a fresh seed):
   `cashier`/`branch_manager` may only act on their assigned branch while
   `super_admin` is unrestricted. Every stock- or branch-sensitive write path
   resolves the branch server-side through this helper.
+- **Consistent read scoping**: `utils/resolveBranchScope.js` applies the same
+  rules to every listing/report endpoint (`sales`, `sales summary`, `shifts`,
+  `active shifts`, `dashboard`, `users`). `cashier`/`branch_manager` are always
+  filtered to their own branch. `super_admin` sees a specific branch when a
+  `branchId` query param is passed, or ALL branches when it is omitted
+  (`null` = no branch filter).
 - **Transactions**: any operation that mutates `Inventory` alongside another
   model (sale, PO receive, transfer receive, manual adjust, return) runs inside a
   single Mongoose session and commits atomically.
 - **Audit trail**: every inventory mutation writes an `InventoryLog` row
   (type, signed change, reference, user, reason) inside the same transaction.
+
+---
+
+## ⚠️ MongoDB replica set requirement (Mongoose transactions)
+
+The sale, return, inventory-adjust, transfer-receive, and purchase-order-receive
+flows use **Mongoose sessions/transactions** (`session.startTransaction()`).
+MongoDB **transactions only work against a replica set or sharded cluster** —
+they are NOT supported on a plain standalone `mongod`. If you run against a
+standalone instance you will get failures such as:
+`"Transaction numbers are only allowed on a replica set member or mongos"`.
+
+### Running a single-node replica set locally (development)
+
+1. Start MongoDB with `--replSet`:
+
+   ```bash
+   # Linux (adjust paths to your install)
+   mongod --dbpath /data/db --replSet rs0 --port 27017
+   # or with Docker
+   docker run -d -p 27017:27017 --name pos-mongo mongo:7 \
+     mongod --replSet rs0 --bind_ip_all
+   ```
+
+2. Initialize the replica set (once):
+
+   ```bash
+   mongosh --port 27017 --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:27017"}]})'
+   # inside Docker instead: docker exec -it pos-mongo mongosh --eval ...
+   ```
+
+3. Use a connection string that stays on `localhost` (so the set member
+   address matches, avoiding `WrongSet`/DNS issues):
+
+   ```
+   # .env
+   MONGO_URI="mongodb://localhost:27017/pos_system?replicaSet=rs0&directConnection=true"
+   ```
+
+### Tests
+
+Pure-logic regression tests run with the Node built-in runner — no database
+required:
+
+```bash
+npm test        # node --test  (runs backend/tests/*.test.js)
+```
+
+They cover branch-scoping rules and the sale money validation. Integration
+tests that exercise transactional flows require the single-node replica set
+above (they are intentionally kept manual via the Testing guide).

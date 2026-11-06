@@ -4,6 +4,7 @@ const {
   closeShift,
   getShiftSummary,
   getActiveShift,
+  getShifts,
 } = require("../controllers/shift.controller");
 const authProtect = require("../middleware/auth.middleware");
 const isAllowed = require("../middleware/allowedRole.middleware");
@@ -11,6 +12,7 @@ const isAllowed = require("../middleware/allowedRole.middleware");
 const router = express.Router();
 
 // any authenticated role can open/close/summarize their own shifts
+router.get("/", authProtect, isAllowed("super_admin", "branch_manager", "cashier"), getShifts);
 router.post("/open", authProtect, openShift);
 router.get("/active", authProtect, getActiveShift);
 router.get("/:id/summary", authProtect, getShiftSummary);

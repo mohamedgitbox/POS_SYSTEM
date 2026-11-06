@@ -1,21 +1,25 @@
 const Sale = require("../models/Sale");
 const Inventory = require("../models/Inventory");
-const assertBranchAccess = require("../utils/assertBranchAccess");
+const resolveBranchScope = require("../utils/resolveBranchScope");
 
 /**
  * getDashboard
  * A single aggregated snapshot for a branch (or the whole organization):
  * revenue, transactions, top products, per-branch revenue, payment mix,
  * and a low-stock alert count. Optional branchId + from/to filters.
+ *
+ * Scope rules (consistent across sales/shifts/reports):
+ * - branch_manager / cashier: always their own branch's dashboard
+ * - super_admin: a specific branch when branchId is given, otherwise the
+ *   org-wide (all branches) dashboard
  */
 const getDashboard = async (req, res) => {
   try {
     const { branchId: requestedBranchId, from, to } = req.query;
 
-    // scoped roles can only view their own branch's dashboard
     let branchId;
     try {
-      branchId = assertBranchAccess(req.user, requestedBranchId);
+      branchId = resolveBranchScope(req.user, requestedBranchId);
     } catch (err) {
       return res.status(err.statusCode || 400).json({
         status: "failed",

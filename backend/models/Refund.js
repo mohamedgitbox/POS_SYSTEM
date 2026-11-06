@@ -72,6 +72,16 @@ const refundSchema = new mongoose.Schema(
       enum: ["completed", "pending", "cancelled"],
       default: "completed",
     },
+    shiftId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Shift",
+      default: null,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ["cash", "card", "digital", "other"],
+      default: "cash",
+    },
   },
   {
     timestamps: true,

@@ -130,6 +130,14 @@ export default function CloseShiftModal({ isOpen, onClose, shiftId }) {
             <span className="text-slate-600">مجموع المبيعات النقدية</span>
             <span className="font-medium">+{Number(cashSales).toLocaleString("ar-EG")} ج.م</span>
           </div>
+          {Number(totals?.totalRefunds || 0) > 0 && (
+            <div className="flex justify-between">
+              <span className="text-slate-600">مجموع الارتجاع النقدي (يخصم من الصندوق)</span>
+              <span className="font-medium text-rose-600">
+                -{Number(totals.totalRefunds).toLocaleString("ar-EG")} ج.م
+              </span>
+            </div>
+          )}
           <div className="flex justify-between pt-2 border-t border-slate-200">
             <span className="font-bold text-slate-900">الرصيد المتوقع</span>
             <span className="font-bold">{Number(expectedBalance).toLocaleString("ar-EG")} ج.م</span>

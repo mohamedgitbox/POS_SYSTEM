@@ -15,20 +15,35 @@ import Button from "../components/ui/Button";
 import { Skeleton } from "../components/ui/Skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { useAuthStore } from "../store/useAuthStore";
 
 export default function Shifts() {
   const [openModalVisible, setOpenModalVisible] = useState(false);
   const [closeModalVisible, setCloseModalVisible] = useState(false);
   const [activeShift, setActiveShift] = useState(null);
+  const { user } = useAuthStore();
+  const isSuperAdmin = user?.role === "super_admin";
+
+  // super_admin branch scope: "" = all branches, otherwise a specific branchId
+  const [branchFilter, setBranchFilter] = useState("");
+  const branchQueryParams = branchFilter ? { branchId: branchFilter } : {};
+
+  // branches for the super_admin selector
+  const { data: branchesData } = useQuery({
+    queryKey: ["branches"],
+    queryFn: () => api.get("/branches"),
+    enabled: isSuperAdmin,
+  });
+  const branches = branchesData?.data || [];
 
   const { data: activeShiftData, isLoading: activeLoading } = useQuery({
-    queryKey: ["activeShift"],
-    queryFn: () => api.get("/shifts/active"),
+    queryKey: ["activeShift", branchFilter],
+    queryFn: () => api.get("/shifts/active", { params: branchQueryParams }),
   });
 
   const { data: shiftsData, isLoading: shiftsLoading } = useQuery({
-    queryKey: ["shifts", "recent"],
-    queryFn: () => api.get("/shifts", { params: { limit: 10 } }),
+    queryKey: ["shifts", "recent", branchFilter],
+    queryFn: () => api.get("/shifts", { params: { limit: 10, ...branchQueryParams } }),
   });
 
   const recentShifts = shiftsData?.data || [];
@@ -66,6 +81,23 @@ export default function Shifts() {
   return (
     <PageShell title="إدارة الورديات" subtitle="إدارة وورديات الكاشير والوردية النقدية">
       <div className="max-w-6xl mx-auto space-y-6">
+        {/* Branch selector - super_admin can view shifts per branch or all */}
+        {isSuperAdmin && branches.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex items-center gap-3">
+            <label className="text-sm font-medium text-slate-700">الفرع</label>
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="h-10 px-3 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            >
+              <option value="">كل الفروع</option>
+              {branches.map((b) => (
+                <option key={b._id} value={b._id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Active shift card */}
         {active ? (
           <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-lg">
@@ -180,6 +212,7 @@ export default function Shifts() {
                   <TableRow>
                     <TableHead>رقم الوردية</TableHead>
                     <TableHead>الكاشير</TableHead>
+                    {isSuperAdmin && <TableHead>الفرع</TableHead>}
                     <TableHead>وقت الفتح</TableHead>
                     <TableHead>وقت الإغلاق</TableHead>
                     <TableHead>رصيد الفتح</TableHead>
@@ -193,6 +226,9 @@ export default function Shifts() {
                     <TableRow key={shift._id}>
                       <TableCell className="font-mono text-sm">{shift._id.slice(-8)}</TableCell>
                       <TableCell>{shift.cashierId?.name || "—"}</TableCell>
+                      {isSuperAdmin && (
+                        <TableCell>{shift.branchId?.name || "—"}</TableCell>
+                      )}
                       <TableCell>
                         {new Date(shift.openedAt).toLocaleString("ar-EG", {
                           month: "short",

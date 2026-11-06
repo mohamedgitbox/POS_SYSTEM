@@ -12,6 +12,9 @@ import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 import { useCartStore } from "../../store/useCartStore";
 import { useToastStore } from "../../store/useToastStore";
+import { useSettingsStore } from "../../store/useSettingsStore";
+import { useAuthStore } from "../../store/useAuthStore";
+import { usePosBranchStore } from "../../store/usePosBranchStore";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 
@@ -22,16 +25,23 @@ const PAYMENT_METHODS = [
   { value: "other", label: "أخرى", icon: MoreHorizontal },
 ];
 
-const formatMoney = (value) =>
+const formatMoney = (value, symbol = "ج.م") =>
   `${Number(value || 0).toLocaleString("ar-EG", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })} ج.م`;
+  })} ${symbol}`;
 
 export default function CheckoutModal({ isOpen, onClose }) {
   const queryClient = useQueryClient();
   const { success, error: showError } = useToastStore();
   const { items, subtotal, tax, total, clearCart } = useCartStore();
+  const { taxRate, currencySymbol } = useSettingsStore();
+  const { user } = useAuthStore();
+  const isSuperAdmin = user?.role === "super_admin";
+  // super_admin sells from the branch selected in the POS header; scoped
+  // roles get their branch resolved server-side
+  const posBranchId = usePosBranchStore((s) => s.branchId);
+  const noBranchSelected = isSuperAdmin && !posBranchId;
 
   const [discount, setDiscount] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -86,6 +96,7 @@ export default function CheckoutModal({ isOpen, onClose }) {
         paymentMethod,
         tax: Number(tax.toFixed(2)),
         discount: Number(discountValue.toFixed(2)),
+        ...(isSuperAdmin ? { branchId: posBranchId } : {}),
       });
 
       const sale = res?.data?.data?.sale || res?.data?.data || res?.data;
@@ -141,13 +152,13 @@ export default function CheckoutModal({ isOpen, onClose }) {
             <div className="flex justify-between">
               <span className="text-slate-500">المبلغ المدفوع</span>
               <span className="font-bold text-slate-900">
-                {formatMoney(payableTotal)}
+                {formatMoney(payableTotal, currencySymbol)}
               </span>
             </div>
             {change > 0 && (
               <div className="flex justify-between text-emerald-700">
                 <span>الباقي للعميل</span>
-                <span className="font-bold">{formatMoney(change)}</span>
+                <span className="font-bold">{formatMoney(change, currencySymbol)}</span>
               </div>
             )}
           </div>
@@ -178,22 +189,22 @@ export default function CheckoutModal({ isOpen, onClose }) {
             <div className="flex justify-between text-slate-500">
               <span>المجموع الفرعي</span>
               <span className="font-medium text-slate-900">
-                {formatMoney(subtotal)}
+                {formatMoney(subtotal, currencySymbol)}
               </span>
             </div>
             <div className="flex justify-between text-slate-500">
-              <span>الضريبة (5%)</span>
-              <span className="font-medium text-slate-900">{formatMoney(tax)}</span>
+              <span>الضريبة ({Number(taxRate).toLocaleString("ar-EG")}%)</span>
+              <span className="font-medium text-slate-900">{formatMoney(tax, currencySymbol)}</span>
             </div>
             <div className="flex justify-between text-slate-500">
               <span>الخصم</span>
               <span className="font-medium text-rose-600">
-                - {formatMoney(discountValue)}
+                - {formatMoney(discountValue, currencySymbol)}
               </span>
             </div>
             <div className="flex justify-between text-base font-bold text-slate-900 pt-2 border-t border-slate-200">
               <span>المبلغ القابل للدفع</span>
-              <span className="text-blue-600">{formatMoney(payableTotal)}</span>
+              <span className="text-blue-600">{formatMoney(payableTotal, currencySymbol)}</span>
             </div>
           </div>
 
@@ -278,7 +289,7 @@ export default function CheckoutModal({ isOpen, onClose }) {
                 )}
                 {!insufficientCash && paidAmount !== "" && (
                   <p className="text-xs text-emerald-700 mt-1">
-                    الباقي: {formatMoney(change)}
+                    الباقي: {formatMoney(change, currencySymbol)}
                   </p>
                 )}
               </div>
@@ -303,14 +314,18 @@ export default function CheckoutModal({ isOpen, onClose }) {
             size="lg"
             className="w-full"
             onClick={handleSubmit}
-            disabled={submitting || items.length === 0 || insufficientCash}
+            disabled={submitting || items.length === 0 || insufficientCash || noBranchSelected}
           >
             {submitting ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <CheckCircle2 className="w-5 h-5 ml-2" />
             )}
-            {submitting ? "جارٍ إتمام البيع..." : "تأكيد الدفع"}
+            {noBranchSelected
+              ? "اختر الفرع أولاً"
+              : submitting
+                ? "جارٍ إتمام البيع..."
+                : "تأكيد الدفع"}
           </Button>
         </div>
       </div>

@@ -4,10 +4,19 @@ const assertBranchAccess = require("../utils/assertBranchAccess");
 
 const getAllCustomers = async (req, res) => {
   try {
+    const { branchId: requestedBranchId, search } = req.query;
+
+    let branchId;
+    try {
+      branchId = assertBranchAccess(req.user, requestedBranchId);
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
     const filter = {};
-
-    const { branchId, search } = req.query;
-
     if (branchId) filter.branchId = branchId;
 
     if (search) {
@@ -56,6 +65,15 @@ const getCustomerById = async (req, res) => {
       return res.status(404).json({
         status: "failed",
         msg: "Customer not found",
+      });
+    }
+
+    try {
+      assertBranchAccess(req.user, customer.branchId.toString());
+    } catch (err) {
+      return res.status(err.statusCode || 403).json({
+        status: "failed",
+        msg: err.message,
       });
     }
 
@@ -159,6 +177,24 @@ const createCustomer = async (req, res) => {
 
 const updateCustomer = async (req, res) => {
   try {
+    const customer = await Customer.findById(req.params.id);
+
+    if (!customer) {
+      return res.status(404).json({
+        status: "failed",
+        msg: "Customer not found",
+      });
+    }
+
+    try {
+      assertBranchAccess(req.user, customer.branchId.toString());
+    } catch (err) {
+      return res.status(err.statusCode || 403).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
     const updates = req.body;
 
     if (updates.branchId) {
@@ -171,26 +207,18 @@ const updateCustomer = async (req, res) => {
       }
     }
 
-    // createdBy is immutable after creation
     delete updates.createdBy;
 
-    const customer = await Customer.findByIdAndUpdate(
+    const updatedCustomer = await Customer.findByIdAndUpdate(
       req.params.id,
       updates,
       { new: true, runValidators: true },
     );
 
-    if (!customer) {
-      return res.status(404).json({
-        status: "failed",
-        msg: "Customer not found",
-      });
-    }
-
     res.status(200).json({
       status: "success",
       msg: "Customer updated successfully",
-      data: customer,
+      data: updatedCustomer,
     });
   } catch (error) {
     if (error.name === "CastError") {
@@ -226,7 +254,7 @@ const updateCustomer = async (req, res) => {
 
 const deleteCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findByIdAndDelete(req.params.id);
+    const customer = await Customer.findById(req.params.id);
 
     if (!customer) {
       return res.status(404).json({
@@ -234,6 +262,17 @@ const deleteCustomer = async (req, res) => {
         msg: "Customer not found",
       });
     }
+
+    try {
+      assertBranchAccess(req.user, customer.branchId.toString());
+    } catch (err) {
+      return res.status(err.statusCode || 403).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
+
+    await Customer.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       status: "success",

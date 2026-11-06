@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Users, Store, Settings as SettingsIcon } from "lucide-react";
 import PageShell from "../components/layout/PageShell";
 import Card from "../components/ui/Card";
@@ -7,9 +7,11 @@ import { Input } from "../components/ui/Input";
 import Modal from "../components/ui/Modal";
 import UsersTab from "../components/settings/UsersTab";
 import BranchesTab from "../components/settings/BranchesTab";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useToastStore } from "../store/useToastStore";
+import { useSettingsStore, sanitizeSettings } from "../store/useSettingsStore";
+import { useCartStore } from "../store/useCartStore";
 
 const TABS = [
   { id: "users", label: "المستخدمون", icon: Users },
@@ -23,7 +25,7 @@ const ROLES = [
   { value: "cashier", label: "كاشير" },
 ];
 
-function UserForm({ value = {}, onChange, isEdit = false }) {
+function UserForm({ value = {}, onChange, isEdit = false, branches = [] }) {
   const setField = (field, v) => onChange((prev) => ({ ...prev, [field]: v }));
   return (
     <form className="space-y-4">
@@ -81,13 +83,16 @@ function UserForm({ value = {}, onChange, isEdit = false }) {
           className="w-full h-10 px-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
         >
           <option value="">بدون فرع</option>
+          {branches.map((b) => (
+            <option key={b._id} value={b._id}>{b.name}</option>
+          ))}
         </select>
       </div>
     </form>
   );
 }
 
-function BranchForm({ value = {}, onChange }) {
+function BranchForm({ value = {}, onChange, users = [] }) {
   const setField = (field, v) => onChange((prev) => ({ ...prev, [field]: v }));
   const setAddress = (part, v) =>
     onChange((prev) => ({ ...prev, address: { ...prev.address, [part]: v } }));
@@ -169,6 +174,11 @@ function BranchForm({ value = {}, onChange }) {
           className="w-full h-10 px-3 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
         >
           <option value="">بدون مدير</option>
+          {users
+            .filter((u) => u.role === "branch_manager" || u.role === "super_admin")
+            .map((u) => (
+              <option key={u._id} value={u._id}>{u.name}</option>
+            ))}
         </select>
       </div>
       <div className="flex items-center gap-2">
@@ -196,35 +206,83 @@ export default function Settings() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const queryClient = useQueryClient();
-  const { success, error: showError } = useToastStore();
+  const { success, error: showError, info } = useToastStore();
 
-  // General settings form state
-  const [generalSettings, setGeneralSettings] = useState({
-    taxRate: 14,
-    currency: "EGP",
-    currencySymbol: "ج.م",
-    lowStockAlertThreshold: 10,
-    allowNegativeStock: false,
+  // Branch options for the user form (and shift/open selection elsewhere)
+  const { data: branchesData } = useQuery({
+    queryKey: ["branches"],
+    queryFn: () => api.get("/branches"),
+  });
+  const branches = branchesData?.data || [];
+
+  // manager options for the branch form (admins can list users)
+  const { data: usersData } = useQuery({
+    queryKey: ["users", "options"],
+    queryFn: () => api.get("/users"),
+  });
+  const userOptions = usersData?.data || [];
+
+  // General settings: hydrate from the backend, keep a persisted local copy,
+  // and POST/PUT to /api/settings/general with clear feedback on failure.
+  const generalSettings = useSettingsStore();
+  const { setSettings } = generalSettings;
+
+  useQuery({
+    queryKey: ["settings", "general"],
+    queryFn: async () => {
+      const res = await api.get("/settings/general");
+      const server = res?.data?.data?.settings;
+      if (server) setSettings(server);
+      return res;
+    },
   });
 
+  // keep cart totals in sync whenever the tax rate changes
+  useEffect(() => {
+    useCartStore.getState().recomputeTotals();
+  }, [generalSettings.taxRate, setSettings]);
+
   const saveGeneralSettings = useMutation({
-    mutationFn: (data) => api.post("/settings/general", data),
-    onSuccess: () => {
-      success("تم حفظ الإعدادات بنجاح", "تمت العملية");
+    mutationFn: (data) => api.put("/settings/general", data),
+    onSuccess: (res) => {
+      const server = res?.data?.data?.settings;
+      if (server) setSettings(server);
+      // refresh the cached settings copy so POS tax stays consistent
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      useCartStore.getState().recomputeTotals();
+      success("تم حفظ الإعدادات على الخادم بنجاح", "تمت العملية");
     },
-    // Fallback if endpoint doesn't exist yet
     onError: () => {
-      success("تم حفظ الإعدادات (محلياً)", "تمت العملية");
+      // persist locally only; be transparent about where the settings live
+      setSettings(generalSettings);
+      /**
+       * Local fallback: when the backend is unavailable or the account lacks
+       * admin permission, settings stay on this device (localStorage) and the
+       * UI still reflects/preferences them consistently.
+       */
+      info("تعذر الحفظ على الخادم - تم حفظ الإعدادات محلياً على هذا الجهاز فقط", "تنبيه");
     },
   });
 
   const handleSaveGeneralSettings = () => {
-    saveGeneralSettings.mutate(generalSettings);
+    saveGeneralSettings.mutate(sanitizeSettings(generalSettings));
   };
 
   const handleOpenUserModal = (mode, user) => {
     setUserMode(mode);
     setSelectedUser(user || null);
+    setUserForm(
+      mode === "edit" && user
+        ? {
+            name: user.name || "",
+            email: user.email || "",
+            password: "",
+            role: user.role || "cashier",
+            branchId:
+              (user.branchId && (user.branchId._id || user.branchId)) || "",
+          }
+        : { name: "", email: "", password: "", role: "cashier", branchId: "" }
+    );
     setUserModalOpen(true);
   };
 
@@ -269,9 +327,21 @@ export default function Settings() {
   const userMutation = useMutation({
     mutationFn: async (data) => {
       if (userMode === "edit") {
-        return api.put(`/users/${selectedUser._id}`, data);
+        // updates go through the protected user management endpoint
+        return api.put(`/users/${selectedUser._id}`, {
+          ...data,
+          branchId: data.branchId || null,
+        });
       }
-      return api.post("/users", data);
+      // creation goes through the admin-only register endpoint which hashes
+      // the password and enforces role/branch defaults
+      return api.post("/auth/register", {
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        role: data.role,
+        branchId: data.branchId || undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["users"]);
@@ -279,7 +349,10 @@ export default function Settings() {
       handleCloseUserModal();
     },
     onError: (err) => {
-      showError(err?.response?.data?.msg || "حدث خطأ أثناء حفظ المستخدم", "خطأ");
+      showError(
+        err?.message || "حدث خطأ أثناء حفظ المستخدم",
+        "خطأ"
+      );
     },
   });
 
@@ -341,7 +414,7 @@ export default function Settings() {
                     <Input
                       type="number"
                       value={generalSettings.taxRate}
-                      onChange={(e) => setGeneralSettings((p) => ({ ...p, taxRate: e.target.value }))}
+                      onChange={(e) => setSettings({ taxRate: e.target.value })}
                     />
                   </div>
                   <div>
@@ -350,7 +423,7 @@ export default function Settings() {
                     </label>
                     <Input
                       value={generalSettings.currency}
-                      onChange={(e) => setGeneralSettings((p) => ({ ...p, currency: e.target.value }))}
+                      onChange={(e) => setSettings({ currency: e.target.value })}
                     />
                   </div>
                   <div>
@@ -359,7 +432,7 @@ export default function Settings() {
                     </label>
                     <Input
                       value={generalSettings.currencySymbol}
-                      onChange={(e) => setGeneralSettings((p) => ({ ...p, currencySymbol: e.target.value }))}
+                      onChange={(e) => setSettings({ currencySymbol: e.target.value })}
                     />
                   </div>
                   <div>
@@ -369,7 +442,7 @@ export default function Settings() {
                     <Input
                       type="number"
                       value={generalSettings.lowStockAlertThreshold}
-                      onChange={(e) => setGeneralSettings((p) => ({ ...p, lowStockAlertThreshold: e.target.value }))}
+                      onChange={(e) => setSettings({ lowStockAlertThreshold: e.target.value })}
                     />
                   </div>
                   <div className="flex items-center gap-2">
@@ -377,7 +450,7 @@ export default function Settings() {
                       type="checkbox"
                       id="negativeStock"
                       checked={generalSettings.allowNegativeStock}
-                      onChange={(e) => setGeneralSettings((p) => ({ ...p, allowNegativeStock: e.target.checked }))}
+                      onChange={(e) => setSettings({ allowNegativeStock: e.target.checked })}
                       className="w-4 h-4 text-blue-600 rounded"
                     />
                     <label htmlFor="negativeStock" className="text-sm text-slate-700">
@@ -415,7 +488,12 @@ export default function Settings() {
             </>
           }
         >
-          <UserForm value={userForm} onChange={setUserForm} isEdit={userMode === "edit"} />
+          <UserForm
+            value={userForm}
+            onChange={setUserForm}
+            isEdit={userMode === "edit"}
+            branches={branches}
+          />
         </Modal>
 
         {/* Branch modal */}
@@ -438,7 +516,7 @@ export default function Settings() {
             </>
           }
         >
-          <BranchForm value={branchForm} onChange={setBranchForm} />
+          <BranchForm value={branchForm} onChange={setBranchForm} users={userOptions} />
         </Modal>
       </div>
     </PageShell>

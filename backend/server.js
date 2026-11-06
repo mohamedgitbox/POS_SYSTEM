@@ -27,6 +27,7 @@ app.use("/api/transfers", require("./routes/transfer.route"));
 app.use("/api/sales", require("./routes/sale.route"));
 app.use("/api/reports", require("./routes/report.route"));
 app.use("/api/shifts", require("./routes/shift.route"));
+app.use("/api/settings", require("./routes/setting.route"));
 
 // the main route
 app.get("/", (req, res) => {

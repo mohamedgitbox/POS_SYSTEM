@@ -1,16 +1,18 @@
 import { Trash2, Minus, Plus, ShoppingCart, Lock, X } from "lucide-react";
 import Button from "../ui/Button";
 import { useCartStore } from "../../store/useCartStore";
+import { useSettingsStore } from "../../store/useSettingsStore";
 
-const formatMoney = (value) =>
+const formatMoney = (value, symbol = "ج.م") =>
   `${Number(value || 0).toLocaleString("ar-EG", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })} ج.م`;
+  })} ${symbol}`;
 
 export default function CartPanel({ onCheckout, checkoutDisabled = false }) {
   const { items, updateQuantity, removeItem, clearCart, itemCount, subtotal, tax, total } =
     useCartStore();
+  const { taxRate, currencySymbol } = useSettingsStore();
 
   return (
     <div className="flex flex-col h-full bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -56,7 +58,7 @@ export default function CartPanel({ onCheckout, checkoutDisabled = false }) {
                     {item.productName}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {formatMoney(item.price)} × {item.quantity}
+                    {formatMoney(item.price, currencySymbol)} × {item.quantity}
                   </p>
                 </div>
 
@@ -87,7 +89,7 @@ export default function CartPanel({ onCheckout, checkoutDisabled = false }) {
 
                 <div className="text-left flex-shrink-0 w-20">
                   <p className="text-sm font-bold text-slate-900">
-                    {formatMoney(item.price * item.quantity)}
+                    {formatMoney(item.price * item.quantity, currencySymbol)}
                   </p>
                 </div>
 
@@ -109,15 +111,15 @@ export default function CartPanel({ onCheckout, checkoutDisabled = false }) {
         <div className="space-y-1.5">
           <div className="flex justify-between text-sm text-slate-600">
             <span>المجموع الفرعي</span>
-            <span className="font-medium">{formatMoney(subtotal)}</span>
+            <span className="font-medium">{formatMoney(subtotal, currencySymbol)}</span>
           </div>
           <div className="flex justify-between text-sm text-slate-600">
-            <span>الضريبة (5%)</span>
-            <span className="font-medium">{formatMoney(tax)}</span>
+            <span>الضريبة ({Number(taxRate).toLocaleString("ar-EG")}%)</span>
+            <span className="font-medium">{formatMoney(tax, currencySymbol)}</span>
           </div>
           <div className="flex justify-between text-base font-bold text-slate-900 pt-2 border-t border-slate-200">
             <span>الإجمالي</span>
-            <span className="text-blue-600">{formatMoney(total)}</span>
+            <span className="text-blue-600">{formatMoney(total, currencySymbol)}</span>
           </div>
         </div>
 
