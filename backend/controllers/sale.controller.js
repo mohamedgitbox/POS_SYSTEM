@@ -89,7 +89,25 @@ const createSale = async (req, res) => {
     const saleItems = [];
     let subtotal = 0;
 
+    const seenProducts = new Set();
     for (const item of items) {
+      if (seenProducts.has(item.productId)) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          status: "failed",
+          msg: `Duplicate product ${item.productId} in items array. Merge quantities into a single line.`,
+        });
+      }
+      seenProducts.add(item.productId);
+
+      if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          status: "failed",
+          msg: "Each item quantity must be a positive integer",
+        });
+      }
+
       const product = products.find((p) => p._id.toString() === item.productId);
       const inventory = await Inventory.findOne({
         productId: item.productId,
@@ -125,18 +143,19 @@ const createSale = async (req, res) => {
       });
     }
 
+    const updatedInventories = [];
     for (const item of items) {
-      await Inventory.findOneAndUpdate(
+      const updated = await Inventory.findOneAndUpdate(
         { productId: item.productId, branchId: branchId },
         { $inc: { quantity: -item.quantity } },
-        { session },
+        { new: true, session },
       );
+      updatedInventories.push({ productId: item.productId, quantity: updated ? updated.quantity : null });
     }
 
     const total = subtotal + tax - discount;
     const saleNumber = `SALE-${Date.now()}`;
 
-    // link to an open shift (if any) for the current cashier + branch
     const activeShift = await Shift.findOne({
       branchId: branchId,
       cashierId: cashierId,
@@ -164,18 +183,20 @@ const createSale = async (req, res) => {
       { session },
     );
 
-    // audit trail: one log entry per item, written inside the same transaction
     await InventoryLog.insertMany(
-      saleItems.map((item) => ({
-        productId: item.productId,
-        branchId,
-        type: "sale",
-        change: -item.quantity,
-        quantityAfter: null, // backfilled below
-        referenceId: newSale[0]._id,
-        userId: cashierId,
-        reason: `Sale ${newSale[0].saleNumber}`,
-      })),
+      saleItems.map((item) => {
+        const inv = updatedInventories.find((u) => u.productId.toString() === item.productId.toString());
+        return {
+          productId: item.productId,
+          branchId,
+          type: "sale",
+          change: -item.quantity,
+          quantityAfter: inv ? inv.quantity : null,
+          referenceId: newSale[0]._id,
+          userId: cashierId,
+          reason: `Sale ${newSale[0].saleNumber}`,
+        };
+      }),
       { session },
     );
 
@@ -265,6 +286,14 @@ const createReturn = async (req, res) => {
         return res.status(400).json({
           status: "failed",
           msg: "Each returned item must include productId and quantity",
+        });
+      }
+
+      if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          status: "failed",
+          msg: "Each return quantity must be a positive integer",
         });
       }
 
@@ -391,12 +420,29 @@ const createReturn = async (req, res) => {
 
 const getSales = async (req, res) => {
   try {
-    const { branchId, from, to, status, page = 1, limit = 10 } = req.query;
+    const { branchId: requestedBranchId, from, to, status, search, page = 1, limit = 10 } = req.query;
+
+    let branchId;
+    try {
+      branchId = assertBranchAccess(req.user, requestedBranchId);
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({
+        status: "failed",
+        msg: err.message,
+      });
+    }
 
     const filter = {};
 
     if (branchId) filter.branchId = branchId;
     if (status) filter.status = status;
+
+    if (search) {
+      filter.$or = [
+        { saleNumber: { $regex: search, $options: "i" } },
+        { "customerInfo.name": { $regex: search, $options: "i" } },
+      ];
+    }
 
     if (from || to) {
       filter.createdAt = {};

@@ -20,7 +20,7 @@ export default function CartPanel({ onCheckout, checkoutDisabled = false }) {
           <ShoppingCart className="w-5 h-5 text-blue-600" />
           <h3 className="font-bold text-slate-900">السلة الحالية</h3>
           <span className="bg-blue-600 text-white text-xs font-bold rounded-full min-w-6 h-6 px-2 inline-flex items-center justify-center">
-            {itemCount()}
+            {itemCount}
           </span>
         </div>
         {items.length > 0 && (

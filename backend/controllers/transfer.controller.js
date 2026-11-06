@@ -126,6 +126,12 @@ const createTransfer = async (req, res) => {
           msg: "Each item must include productId and quantity",
         });
       }
+      if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+        return res.status(400).json({
+          status: "failed",
+          msg: "Each item quantity must be a positive integer",
+        });
+      }
     }
 
     const [source, destination] = await Promise.all([

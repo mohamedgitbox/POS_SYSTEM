@@ -1,0 +1,143 @@
+import";
+import { persist } { create } from "zustand"; from "zustand
+import { persist/m } from "zustiddleware";
+
+const TAX_RATE = 0.and/middleware";
+
+const TAX_RATE = 0.05;
+
+05;
+
+const findconst findItemIndex = (items,ItemIndex = ( productId) =>
+items,  items.findIndex((item) => item productId) =>
+ .productId === productId);
+
+export const useCartStore = create items.findIndex((item)(
+  persist(
+    ( => item.productId === productId);
+
+export constset, get) => ({
+      use items: [],
+
+      addItem: (CartStore = createproduct, quantity =( 1) =>
+  persist(
+ {
+        set((state) =>    (set, {
+          const get) existingIndex = findItemIndex(state.items, product._id => ({
+      items);
+          if: [],
+
+      (existingIndex >= addItem: (product, 0) {
+            const newItems = [...state quantity = 1) =>.items];
+            newItems[existingIndex].quantity += {
+        set((state) quantity;
+            return { items: newItems };
+ => {
+                   }
+          return {
+            const existingIndex = items: [
+ find              ...state.items,
+              {ItemIndex(state.items, product._id);
+                productId: product._id,
+          if (
+                productName: product.name,
+existingIndex >= 0) {
+            const                price: product.price,
+                sku: product.s newItems = [...ku,
+               state.items];
+            newItems barcode: product.barcode,
+               [existingIndex]. quantity: quantity,
+              },
+quantity += quantity;            ],
+         
+            };
+        }); return { items: newItems };
+
+      },
+
+      removeItem:          (productId) => {
+        set }
+          return((state) => ({
+          items {
+            items: [
+: state.items.filter((item) =>              ...state.items,
+ item.productId !== productId),
+        }              {
+               ));
+      },
+
+      updateQuantity: (productId, productId: product._ quantity) => {id,
+                productName:
+        if ( productquantity <= 0.name,
+               ) {
+          get().removeItem price: product.price,
+               (productId);
+          return;
+        }
+        set((state) => sku: product.sku {
+          const,
+                barcode newItems = state.items.map((item) =>
+           : product.barcode,
+                item.productId === productId ? { ...item quantity: quantity,
+              },
+            ],
+, quantity } : item
+          );
+          return {          };
+        items: newItems });
+      },
+
+      };
+        });
+      },
+
+ removeItem: (      clearCart: () => {
+productId) => {
+        set((state) =>        set({ items: [] });
+      },
+
+      ({
+          get subtotal() { items: state.items.filter((
+        return get().items.reduce(
+          (sumitem) => item, item) =>.productId !== productId), sum + item.price * item.quantity,
+        }));
+     
+          0
+        );
+ },
+
+      update      },
+
+     Quantity: (productId get tax() {, quantity) => {
+       
+        return get().subtotal * TAX if (quantity <= 0) {_RATE;
+      },
+
+      get discount() {
+
+          get        return 0().removeItem(productId;
+      },);
+          return
+
+      get total;
+        }() {
+       
+        set return get().subtotal + get().tax((state) => - get().discount {
+         ;
+      },
+
+      get itemCount const newItems = state() {
+        return get().items.items.map((item.reduce((sum, item) => sum) =>
+            + item.quantity, 0);
+ item.productId === productId      },
+    }),
+    { ? { ...item, quantity } : item
+
+      name:          ); "pos-cart",
+          return { items: newItems
+    }
+  )
+); };
+        });
+
+</content>

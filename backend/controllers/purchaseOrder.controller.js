@@ -118,6 +118,12 @@ const createPurchaseOrder = async (req, res) => {
           msg: "Each item must include productId, orderedQty, and unitCost",
         });
       }
+      if (!Number.isInteger(item.orderedQty) || item.orderedQty < 1) {
+        return res.status(400).json({
+          status: "failed",
+          msg: "Each item orderedQty must be a positive integer",
+        });
+      }
     }
 
     const branch = await Branch.findById(branchId);
